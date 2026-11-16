@@ -1,7 +1,7 @@
-// Placeholder M0. Les modèles SwiftData `Conversation` et `Message` arrivent en M3.
+// M0 placeholder. The SwiftData `Conversation` and `Message` models land in M3.
 import Foundation
 
-/// Namespace du module de persistance. Vide en M0.
+/// Persistence module namespace. Empty in M0.
 public enum HermesStoreModule {
     public static let name = "HermesStore"
 }

@@ -96,7 +96,7 @@ Config/Local*.xcconfig
 ## macOS
 .DS_Store
 
-## Tuist: projet et workspace générés (source de vérité : Project.swift)
+## Tuist: generated project and workspace (source of truth: Project.swift)
 *.xcodeproj
 *.xcworkspace
 Derived/

@@ -1,20 +1,21 @@
-# Contribuer
+# Contributing
 
-Projet personnel, mais on garde un workflow strict.
+A personal project, but with a strict workflow.
 
 ## Workflow
 
-1. Une issue = une branche = une PR.
-2. Branche nommée `feat/<m>-<slug>` ou `fix/<slug>` (ex. `feat/m1-sse-parser`).
-3. Commits petits, au format [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `test:`, `docs:`, `chore:`).
-4. Avant de pousser : `mise run test` doit passer.
-5. La PR référence l'issue (`Closes #N`) et coche les critères d'acceptation.
-6. Une issue ne passe en `Done` que si ses critères d'acceptation sont remplis et les tests passent.
+1. One issue = one branch = one PR.
+2. Branch named `feat/<m>-<slug>` or `fix/<slug>` (e.g. `feat/m1-sse-parser`).
+3. Small commits following [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `test:`, `docs:`, `chore:`).
+4. Before pushing: `mise run test` must pass.
+5. The PR references its issue (`Closes #N`) and checks off the acceptance criteria.
+6. An issue only moves to `Done` once its acceptance criteria are met and the tests pass.
 
 ## Style
 
-- Swift 6, `async/await`, `@Observable`, pas de singletons globaux.
-- Pas de dépendance externe (SPM ou autre).
-- Pas de secret, d'URL ou de clé réelle dans le code, les tests ou les fixtures.
+- Everything in English: code, comments, docs, commits, PRs.
+- Swift 6, `async/await`, `@Observable`, no global singletons.
+- No external dependencies (SPM or otherwise).
+- No real secrets, URLs or keys in code, tests or fixtures.
 
-Voir [CLAUDE.md](CLAUDE.md) pour l'architecture détaillée.
+See [CLAUDE.md](CLAUDE.md) for the detailed architecture.

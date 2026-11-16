@@ -3,7 +3,7 @@ import Testing
 
 @Suite("HermesAPIPaths")
 struct HermesAPIPathsTests {
-    @Test("le chemin chat/completions correspond au contrat OpenAI-compatible")
+    @Test("chat/completions path matches the OpenAI-compatible contract")
     func chatCompletionsPath() {
         #expect(HermesAPIPaths.chatCompletions == "/v1/chat/completions")
     }

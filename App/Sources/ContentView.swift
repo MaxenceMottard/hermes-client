@@ -6,7 +6,7 @@ struct ContentView: View {
             ContentUnavailableView(
                 "Hermes",
                 systemImage: "bubble.left.and.text.bubble.right",
-                description: Text("Aucune instance configurée.")
+                description: Text("No instance configured.")
             )
         }
     }

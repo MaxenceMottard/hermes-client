@@ -4,7 +4,7 @@ import Testing
 
 @Suite("HermesApp")
 struct HermesAppTests {
-    @Test("La vue racine s'instancie")
+    @Test("Root view can be instantiated")
     @MainActor
     func contentViewBuilds() {
         _ = ContentView()

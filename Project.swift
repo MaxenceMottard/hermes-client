@@ -3,7 +3,7 @@ import ProjectDescription
 let bundleIdPrefix = "dev.mtmcapital.hermes"
 let deploymentTargets: DeploymentTargets = .iOS("27.0")
 
-/// Équipe Apple Developer utilisée pour la signature automatique.
+/// Apple Developer team used for automatic code signing.
 let developmentTeam = "S4J5D3N22R"
 
 let project = Project(

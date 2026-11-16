@@ -16,8 +16,8 @@ permissions:
 
 jobs:
   package-tests:
-    name: Tests HermesKit
-    # Image preview macOS 27 + Xcode 27 (simulateurs iOS 27).
+    name: HermesKit tests
+    # macOS 27 + Xcode 27 preview image (iOS 27 simulators).
     runs-on: xcode-27
     timeout-minutes: 20
     steps:
@@ -26,7 +26,7 @@ jobs:
         run: swift test --package-path HermesKit
 
   app:
-    name: Build & tests app iOS
+    name: iOS app build
     runs-on: xcode-27
     timeout-minutes: 30
     steps:
@@ -35,7 +35,7 @@ jobs:
         with:
           install: true
           cache: true
-      - name: Génération Tuist
+      - name: Generate Tuist project
         run: |
           tuist install
           tuist generate --no-open
@@ -45,6 +45,7 @@ jobs:
             -workspace Hermes.xcworkspace \
             -scheme Hermes \
             -destination 'generic/platform=iOS Simulator'
+      # App tests are disabled: slow, and the business logic is tested in HermesKit.
       # - name: Tests
       #   run: |
       #     xcodebuild test \

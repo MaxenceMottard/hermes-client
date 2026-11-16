@@ -3,7 +3,7 @@ import Testing
 
 @Suite("HermesSecurityModule")
 struct HermesSecurityModuleTests {
-    @Test("le service Keychain ne contient aucun secret")
+    @Test("Keychain service name contains no secret")
     func keychainServiceName() {
         #expect(HermesSecurityModule.keychainService == "hermes-client")
     }
