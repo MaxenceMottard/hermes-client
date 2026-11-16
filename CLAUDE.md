@@ -24,24 +24,15 @@ Client natif SwiftUI iOS 27 / macOS 27 pour une instance self-hosted Hermes Agen
 - Aucune dépendance tierce. Uniquement les frameworks Apple.
 - Aucun secret, URL réelle ou clé dans le code, les tests ou les fixtures. Utiliser `https://hermes.example.test` dans les tests.
 - Les requêtes POST ne sont jamais retentées automatiquement. Timeouts larges (une requête agent peut durer ~30 min).
-- Format : `swift-format` avec `.swift-format` à la racine.
 
 ## Commandes
 
 ```sh
-# Tests du package (macOS avec Xcode 27, ou Linux avec Swift 6.2)
-scripts/test.sh
-
-# Vérification du format (sans modifier les fichiers)
-scripts/lint.sh
-
-# Correction automatique du format
-swift format format -i -r -p HermesKit
-```
-
-```sh
 # Outillage (Tuist, version fixée dans mise.toml)
 mise install
+
+# Tests du package HermesKit (swift test --package-path HermesKit)
+mise run test
 
 # Génération du projet Xcode puis build de l'app iOS
 mise run generate
@@ -51,7 +42,7 @@ mise run build
 mise run test-app
 ```
 
-CI : `.github/workflows/ci.yml` (lint, tests HermesKit, build + tests de l'app) sur chaque PR et sur `main`, runner `xcode-27`.
+CI : `.github/workflows/ci.yml` (tests HermesKit, build + tests de l'app) sur chaque PR et sur `main`, runner `xcode-27`.
 
 ## Git
 

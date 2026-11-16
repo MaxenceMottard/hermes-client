@@ -21,9 +21,6 @@ HermesKit/          Package SPM local : logique métier, testable sans UI
     HermesStore/      persistance SwiftData (à venir, M3)
     HermesSecurity/   wrapper Keychain (à venir, M4)
   Tests/
-scripts/
-  test.sh           lance les tests du package
-  lint.sh           vérifie le format (swift-format)
 ```
 
 ## Prérequis
@@ -43,12 +40,12 @@ open Hermes.xcworkspace
 
 `mise run build` compile l'app en ligne de commande, `mise run test-app` lance ses tests sur simulateur.
 
-La CI GitHub Actions (`.github/workflows/ci.yml`) vérifie le format, lance les tests de HermesKit, puis build et teste l'app sur chaque PR.
+La CI GitHub Actions (`.github/workflows/ci.yml`) lance les tests de HermesKit, puis build et teste l'app sur chaque PR.
 
 ## Tests
 
 ```sh
-scripts/test.sh
+mise run test
 ```
 
 ## Sécurité

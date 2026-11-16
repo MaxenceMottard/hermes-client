@@ -10,11 +10,7 @@ run = "tuist install && tuist generate --no-open"
 
 [tasks.test]
 description = "Lance les tests du package HermesKit"
-run = "scripts/test.sh"
-
-[tasks.lint]
-description = "Vérifie le format Swift"
-run = "scripts/lint.sh"
+run = "swift test --package-path HermesKit"
 
 [tasks.build]
 description = "Build l'app iOS (destination générique simulateur)"

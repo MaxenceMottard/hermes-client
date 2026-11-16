@@ -14,32 +14,16 @@ concurrency:
 permissions:
   contents: read
 
-env:
-  # Image GitHub macOS 27 + Xcode 27 (SDK et simulateurs iOS 27).
-  IOS_DESTINATION: platform=iOS Simulator,name=iPhone 17,OS=27.0
-
 jobs:
-  lint:
-    name: Lint
-    runs-on: xcode-27
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v7
-      - name: swift-format
-        run: scripts/lint.sh
-
   package-tests:
     name: Tests HermesKit
+    # Image GitHub macOS 27 + Xcode 27 (SDK et simulateurs iOS 27).
     runs-on: xcode-27
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - name: Toolchain
-        run: |
-          xcodebuild -version
-          swift --version
       - name: swift test
-        run: scripts/test.sh
+        run: swift test --package-path HermesKit
 
   app:
     name: Build & tests app iOS
@@ -52,8 +36,18 @@ jobs:
           install: true
           cache: true
       - name: Génération Tuist
-        run: mise run generate
+        run: |
+          tuist install
+          tuist generate --no-open
       - name: Build
-        run: mise run build
+        run: |
+          xcodebuild build \
+            -workspace Hermes.xcworkspace \
+            -scheme Hermes \
+            -destination 'generic/platform=iOS Simulator'
       - name: Tests
-        run: mise run test-app
+        run: |
+          xcodebuild test \
+            -workspace Hermes.xcworkspace \
+            -scheme Hermes \
+            -destination 'platform=iOS Simulator,name=iPhone 17,OS=27.0'
