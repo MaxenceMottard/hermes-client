@@ -11,6 +11,10 @@ Voir les [milestones](../../milestones) : client API OpenAI-compatible avec stre
 ## Structure
 
 ```
+App/                Sources, ressources et tests de l'app iOS (UI uniquement)
+Project.swift       manifeste Tuist (le .xcodeproj est généré, non versionné)
+Tuist.swift         configuration Tuist
+mise.toml           outils (tuist) et tâches du projet
 HermesKit/          Package SPM local : logique métier, testable sans UI
   Sources/
     HermesAPI/        client HTTP, parsing SSE, modèles Codable, erreurs typées
@@ -22,13 +26,22 @@ scripts/
   lint.sh           vérifie le format (swift-format)
 ```
 
-L'app elle-même (vues, navigation, injection de dépendances) n'est pas encore créée : le projet Xcode multiplateforme sera ajouté dans une issue dédiée de M0.
-
 ## Prérequis
 
 - Xcode 27 et SDK iOS 27 / macOS 27.
 - Swift 6 (strict concurrency activée).
-- Aucune dépendance tierce : uniquement les frameworks Apple.
+- Aucune dépendance tierce dans l'app : uniquement les frameworks Apple.
+- [mise](https://mise.jdx.dev) pour installer l'outillage (Tuist), version fixée dans `mise.toml`.
+
+## Démarrage
+
+```sh
+mise install          # installe Tuist
+mise run generate     # génère Hermes.xcworkspace
+open Hermes.xcworkspace
+```
+
+`mise run build` compile l'app en ligne de commande.
 
 ## Tests
 

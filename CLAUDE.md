@@ -12,7 +12,7 @@ Client natif SwiftUI iOS 27 / macOS 27 pour une instance self-hosted Hermes Agen
   - `HermesAPI` : client HTTP (`URLSession`), parsing SSE (`URLSession.bytes`), modèles Codable OpenAI-compatibles, erreurs typées.
   - `HermesStore` : persistance SwiftData (`Conversation`, `Message`). M3.
   - `HermesSecurity` : wrapper Keychain, synchronisation iCloud Keychain optionnelle. M4.
-- L'app (vues, navigation, injection de dépendances) ne contient que de la UI. Pas encore créée : le projet Xcode multiplateforme est une issue de M0.
+- L'app (`App/`, vues, navigation, injection de dépendances) ne contient que de la UI. Projet Xcode généré par Tuist depuis `Project.swift` : ne jamais versionner ni éditer le `.xcodeproj` / `.xcworkspace`, modifier le manifeste puis régénérer.
 - Le client API se construit à partir d'une config explicite (URL + clé). Pas de singleton global.
 
 ## Conventions
@@ -39,7 +39,14 @@ scripts/lint.sh
 swift format format -i -r -p HermesKit
 ```
 
-Build de l'app : à documenter quand le projet Xcode existera (M0).
+```sh
+# Outillage (Tuist, version fixée dans mise.toml)
+mise install
+
+# Génération du projet Xcode puis build de l'app iOS
+mise run generate
+mise run build
+```
 
 ## Git
 

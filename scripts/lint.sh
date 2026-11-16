@@ -6,4 +6,4 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
 
-swift format lint --strict --configuration .swift-format -r HermesKit/Sources HermesKit/Tests
+swift format lint --strict --configuration .swift-format -r HermesKit/Sources HermesKit/Tests App Project.swift Tuist.swift
