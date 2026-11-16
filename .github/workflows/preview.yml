@@ -17,7 +17,7 @@ permissions:
 env:
   # Tuist server project, read by Tuist.swift. Update if the Tuist project
   # uses a different handle.
-  TUIST_SERVER_FULL_HANDLE: feetly-app/hermes-client
+  TUIST_SERVER_FULL_HANDLE: mtm-capital/hermes-client
 
 jobs:
   preview:
