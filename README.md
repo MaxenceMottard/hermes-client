@@ -41,7 +41,9 @@ mise run generate     # génère Hermes.xcworkspace
 open Hermes.xcworkspace
 ```
 
-`mise run build` compile l'app en ligne de commande.
+`mise run build` compile l'app en ligne de commande, `mise run test-app` lance ses tests sur simulateur.
+
+La CI GitHub Actions (`.github/workflows/ci.yml`) vérifie le format, lance les tests de HermesKit, puis build et teste l'app sur chaque PR.
 
 ## Tests
 

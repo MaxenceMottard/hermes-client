@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Image GitHub macOS 27 + Xcode 27 (SDK et simulateurs iOS 27).
+  IOS_DESTINATION: platform=iOS Simulator,name=iPhone 17,OS=27.0
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: xcode-27
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: swift-format
+        run: scripts/lint.sh
+
+  package-tests:
+    name: Tests HermesKit
+    runs-on: xcode-27
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+      - name: swift test
+        run: scripts/test.sh
+
+  app:
+    name: Build & tests app iOS
+    runs-on: xcode-27
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+        with:
+          install: true
+          cache: true
+      - name: Génération Tuist
+        run: mise run generate
+      - name: Build
+        run: mise run build
+      - name: Tests
+        run: mise run test-app

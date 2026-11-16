@@ -46,7 +46,12 @@ mise install
 # Génération du projet Xcode puis build de l'app iOS
 mise run generate
 mise run build
+
+# Tests de l'app sur simulateur iOS 27 (IOS_DESTINATION pour changer de simulateur)
+mise run test-app
 ```
+
+CI : `.github/workflows/ci.yml` (lint, tests HermesKit, build + tests de l'app) sur chaque PR et sur `main`, runner `xcode-27`.
 
 ## Git
 

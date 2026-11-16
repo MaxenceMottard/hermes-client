@@ -20,3 +20,8 @@ run = "scripts/lint.sh"
 description = "Build l'app iOS (destination générique simulateur)"
 depends = ["generate"]
 run = "xcodebuild -workspace Hermes.xcworkspace -scheme Hermes -destination 'generic/platform=iOS Simulator' build"
+
+[tasks.test-app]
+description = "Lance les tests de l'app sur simulateur (destination surchargeable via IOS_DESTINATION)"
+depends = ["generate"]
+run = "xcodebuild -workspace Hermes.xcworkspace -scheme Hermes -destination \"${IOS_DESTINATION:-platform=iOS Simulator,name=iPhone 17}\" test"
