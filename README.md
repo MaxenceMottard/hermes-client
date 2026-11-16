@@ -2,7 +2,7 @@
 
 Client natif iOS et macOS pour une instance self-hosted de [Hermes Agent](https://github.com/NousResearch/hermes-agent), destiné à un usage personnel. Il remplace le dashboard web pour discuter avec l'agent.
 
-> Projet privé. Tous droits réservés, voir [LICENSE](LICENSE).
+> Code source public, projet personnel. Tous droits réservés : aucune réutilisation, copie ou redistribution sans autorisation écrite, voir [LICENSE](LICENSE).
 
 ## Fonctionnalités visées
 
