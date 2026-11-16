@@ -1,0 +1,23 @@
+# Project tools, managed by mise (https://mise.jdx.dev).
+# Install: run `mise install` at the repository root.
+
+[tools]
+tuist = "4.216.7"
+
+[tasks.generate]
+description = "Generate the Xcode project with Tuist"
+run = "tuist install && tuist generate --no-open"
+
+[tasks.test]
+description = "Run the HermesKit package tests"
+run = "swift test --package-path HermesKit"
+
+[tasks.build]
+description = "Build the iOS app (generic simulator destination)"
+depends = ["generate"]
+run = "xcodebuild -workspace Hermes.xcworkspace -scheme Hermes -destination 'generic/platform=iOS Simulator' build"
+
+[tasks.test-app]
+description = "Run the app tests on a simulator (override the destination with IOS_DESTINATION)"
+depends = ["generate"]
+run = "xcodebuild -workspace Hermes.xcworkspace -scheme Hermes -destination \"${IOS_DESTINATION:-platform=iOS Simulator,name=iPhone 17}\" test"

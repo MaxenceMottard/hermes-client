@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  package-tests:
+    name: HermesKit tests
+    # macOS 27 + Xcode 27 preview image (iOS 27 simulators).
+    runs-on: xcode-27
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: swift test
+        run: swift test --package-path HermesKit
+
+  app:
+    name: iOS app build
+    runs-on: xcode-27
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+        with:
+          install: true
+          cache: true
+      - name: Generate Tuist project
+        run: |
+          tuist install
+          tuist generate --no-open
+      - name: Build
+        run: |
+          xcodebuild build \
+            -workspace Hermes.xcworkspace \
+            -scheme Hermes \
+            -destination 'generic/platform=iOS Simulator'
+      # App tests are disabled: slow, and the business logic is tested in HermesKit.
+      # - name: Tests
+      #   run: |
+      #     xcodebuild test \
+      #       -workspace Hermes.xcworkspace \
+      #       -scheme Hermes \
+      #       -destination 'platform=iOS Simulator,name=iPhone 17,OS=27.0'

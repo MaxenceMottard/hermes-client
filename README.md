@@ -1,46 +1,64 @@
 # Hermes Client
 
-Client natif iOS et macOS pour une instance self-hosted de [Hermes Agent](https://github.com/NousResearch/hermes-agent), destiné à un usage personnel. Il remplace le dashboard web pour discuter avec l'agent.
+Native iOS and macOS client for a self-hosted [Hermes Agent](https://github.com/NousResearch/hermes-agent) instance, for personal use. It replaces the web dashboard for chatting with the agent.
 
-> Projet privé. Tous droits réservés, voir [LICENSE](LICENSE).
+> Personal project released under the [GNU GPL v3](LICENSE). Copyright (C) 2026 Maxence Mottard.
 
-## Fonctionnalités visées
+## Planned features
 
-Voir les [milestones](../../milestones) : client API OpenAI-compatible avec streaming SSE, écran de chat, persistance SwiftData, réglages sécurisés (Keychain), intégrations système (MenuBarExtra, App Intents), finitions.
+See the [milestones](../../milestones): OpenAI-compatible API client with SSE streaming, chat screen, SwiftData persistence, secure settings (Keychain), system integrations (MenuBarExtra, App Intents), polish.
 
 ## Structure
 
 ```
-HermesKit/          Package SPM local : logique métier, testable sans UI
+App/                iOS app sources, resources and tests (UI only)
+Project.swift       Tuist manifest (the .xcodeproj is generated, not committed)
+Tuist.swift         Tuist configuration
+mise.toml           project tools (tuist) and tasks
+HermesKit/          Local SPM package: business logic, testable without UI
   Sources/
-    HermesAPI/        client HTTP, parsing SSE, modèles Codable, erreurs typées
-    HermesStore/      persistance SwiftData (à venir, M3)
-    HermesSecurity/   wrapper Keychain (à venir, M4)
+    HermesAPI/        HTTP client, SSE parsing, Codable models, typed errors
+    HermesStore/      SwiftData persistence (coming in M3)
+    HermesSecurity/   Keychain wrapper (coming in M4)
   Tests/
-scripts/
-  test.sh           lance les tests du package
-  lint.sh           vérifie le format (swift-format)
 ```
 
-L'app elle-même (vues, navigation, injection de dépendances) n'est pas encore créée : le projet Xcode multiplateforme sera ajouté dans une issue dédiée de M0.
+## Requirements
 
-## Prérequis
+- Xcode 27 with the iOS 27 / macOS 27 SDKs.
+- Swift 6 (strict concurrency enabled).
+- No third-party dependencies in the app: Apple frameworks only.
+- [mise](https://mise.jdx.dev) to install the tooling (Tuist), version pinned in `mise.toml`.
 
-- Xcode 27 et SDK iOS 27 / macOS 27.
-- Swift 6 (strict concurrency activée).
-- Aucune dépendance tierce : uniquement les frameworks Apple.
+## Getting started
+
+```sh
+mise install          # installs Tuist
+mise run generate     # generates Hermes.xcworkspace
+open Hermes.xcworkspace
+```
+
+`mise run build` builds the app from the command line, `mise run test-app` runs its tests on a simulator.
+
+The GitHub Actions CI (`.github/workflows/ci.yml`) runs the HermesKit tests and builds the app on every PR. App tests do not run in CI: the business logic is tested in HermesKit.
 
 ## Tests
 
 ```sh
-scripts/test.sh
+mise run test
 ```
 
-## Sécurité
+## Security
 
-La clé API de l'instance donne un accès shell au serveur. Elle est stockée uniquement dans le Keychain, n'est jamais journalisée, et ne doit jamais figurer dans le repo. L'URL de base et la clé ne sont jamais codées en dur.
+The instance API key grants shell access to the server. It is stored only in the Keychain, never logged, and must never appear in the repository. The base URL and the key are never hard-coded.
 
 ## Documentation
 
-- [CLAUDE.md](CLAUDE.md) : conventions, architecture, commandes.
-- [CONTRIBUTING.md](CONTRIBUTING.md) : workflow issue → branche → PR.
+- [CLAUDE.md](CLAUDE.md): conventions, architecture, commands.
+- [CONTRIBUTING.md](CONTRIBUTING.md): issue → branch → PR workflow.
+
+## License
+
+Copyright (C) 2026 Maxence Mottard.
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. It is distributed without any warranty. See [LICENSE](LICENSE).
