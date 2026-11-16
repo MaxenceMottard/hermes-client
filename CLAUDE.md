@@ -42,7 +42,7 @@ mise run build
 mise run test-app
 ```
 
-CI : `.github/workflows/ci.yml` (tests HermesKit, build + tests de l'app) sur chaque PR et sur `main`, runner `macos-26` (Xcode 26.6).
+CI : `.github/workflows/ci.yml` (tests HermesKit, build + tests de l'app) sur chaque PR et sur `main`, runner `xcode-27` (image preview macOS 27 + Xcode 27).
 
 ## Git
 
