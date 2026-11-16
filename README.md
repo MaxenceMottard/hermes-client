@@ -40,7 +40,7 @@ open Hermes.xcworkspace
 
 `mise run build` compile l'app en ligne de commande, `mise run test-app` lance ses tests sur simulateur.
 
-La CI GitHub Actions (`.github/workflows/ci.yml`) lance les tests de HermesKit, puis build et teste l'app sur chaque PR.
+La CI GitHub Actions (`.github/workflows/ci.yml`) lance les tests de HermesKit et build l'app sur chaque PR. Les tests de l'app n'y tournent pas : la logique métier est testée dans HermesKit.
 
 ## Tests
 
