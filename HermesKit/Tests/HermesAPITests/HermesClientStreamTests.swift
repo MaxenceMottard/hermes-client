@@ -223,4 +223,49 @@ struct HermesClientStreamTests {
             _ = try await collect(makeClient().streamChat(model: "m", messages: messages))
         }
     }
+
+    // MARK: chat (non-streaming)
+    // Lives in the same suite as the streaming tests: they share MockURLProtocol's global state.
+
+    @Test("chat returns choices[0].message.content and sends stream: false")
+    func chatReturnsContent() async throws {
+        let json = try fixtureData("chat_completion", "json")
+        MockURLProtocol.responder = { _ in MockReply(chunks: [json]) }
+
+        let text = try await makeClient().chat(model: "m", messages: messages)
+
+        #expect(text == "Hello, how can I help?")
+        let request = try #require(MockURLProtocol.requests.first)
+        #expect(request.value(forHTTPHeaderField: "Accept") == "application/json")
+        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer test-key-123")
+        let body = try #require(try JSONSerialization.jsonObject(with: MockURLProtocol.bodies[0]) as? [String: Any])
+        #expect(body["stream"] as? Bool == false)
+    }
+
+    @Test("a response without choices maps to invalidResponse")
+    func chatWithoutChoices() async throws {
+        let json = Data(#"{"model":"m","choices":[]}"#.utf8)
+        MockURLProtocol.responder = { _ in MockReply(chunks: [json]) }
+        await #expect(throws: HermesAPIError.invalidResponse) {
+            _ = try await makeClient().chat(model: "m", messages: messages)
+        }
+    }
+
+    @Test("chat: 401 maps to unauthorized, and no retry happens")
+    func chatUnauthorized() async throws {
+        MockURLProtocol.responder = { _ in MockReply(status: 401) }
+        await #expect(throws: HermesAPIError.unauthorized) {
+            _ = try await makeClient().chat(model: "m", messages: messages)
+        }
+        #expect(MockURLProtocol.requests.count == 1)
+    }
+
+    @Test("chat: URLError.timedOut maps to timeout")
+    func chatTimeout() async throws {
+        MockURLProtocol.reset()
+        MockURLProtocol.responder = { _ in MockReply(failure: URLError(.timedOut)) }
+        await #expect(throws: HermesAPIError.timeout) {
+            _ = try await makeClient().chat(model: "m", messages: messages)
+        }
+    }
 }
