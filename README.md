@@ -2,7 +2,7 @@
 
 Client natif iOS et macOS pour une instance self-hosted de [Hermes Agent](https://github.com/NousResearch/hermes-agent), destiné à un usage personnel. Il remplace le dashboard web pour discuter avec l'agent.
 
-> Code source public, projet personnel. Tous droits réservés : aucune réutilisation, copie ou redistribution sans autorisation écrite, voir [LICENSE](LICENSE).
+> Projet personnel distribué sous licence [GNU GPL v3](LICENSE). Copyright (C) 2026 Maxence Mottard.
 
 ## Fonctionnalités visées
 
@@ -56,3 +56,9 @@ La clé API de l'instance donne un accès shell au serveur. Elle est stockée un
 
 - [CLAUDE.md](CLAUDE.md) : conventions, architecture, commandes.
 - [CONTRIBUTING.md](CONTRIBUTING.md) : workflow issue → branche → PR.
+
+## Licence
+
+Copyright (C) 2026 Maxence Mottard.
+
+Ce programme est un logiciel libre : vous pouvez le redistribuer et/ou le modifier selon les termes de la GNU General Public License publiée par la Free Software Foundation, version 3 de la licence ou (à votre choix) toute version ultérieure. Il est distribué sans aucune garantie. Voir [LICENSE](LICENSE).
