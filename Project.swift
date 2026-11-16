@@ -1,7 +1,10 @@
 import ProjectDescription
 
-let bundleIdPrefix = "dev.hermes.client"
+let bundleIdPrefix = "dev.mtmcapital.hermes"
 let deploymentTargets: DeploymentTargets = .iOS("27.0")
+
+/// Équipe Apple Developer utilisée pour la signature automatique.
+let developmentTeam = "S4J5D3N22R"
 
 let project = Project(
     name: "Hermes",
@@ -20,7 +23,7 @@ let project = Project(
             "SWIFT_UPCOMING_FEATURE_NONISOLATED_NONSENDING_BY_DEFAULT": "YES",
             "SWIFT_UPCOMING_FEATURE_INFER_ISOLATED_CONFORMANCES": "YES",
             "ENABLE_USER_SCRIPT_SANDBOXING": "YES",
-        ]
+        ].automaticCodeSigning(devTeam: developmentTeam)
     ),
     targets: [
         .target(
