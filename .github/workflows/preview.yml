@@ -5,6 +5,7 @@ name: Preview
 # - a simulator build (always),
 # - an ad hoc signed IPA, installable on the devices registered in the Apple
 #   Developer account (only when the App Store Connect API key secrets exist).
+# The label is removed as soon as the run starts: add it again to rebuild.
 on:
   pull_request:
     types: [labeled]
@@ -23,6 +24,23 @@ env:
   TUIST_SERVER_FULL_HANDLE: mtm-capital/hermes-client
 
 jobs:
+  # Removes the label right away, so that adding it again triggers a new preview.
+  remove-label:
+    name: Remove preview label
+    if: github.event.label.name == 'preview' && github.event.pull_request.state == 'open'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Remove the preview label
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr edit "${{ github.event.pull_request.number }}" \
+            --repo "${{ github.repository }}" \
+            --remove-label preview
+
   preview:
     name: Tuist Preview
     if: github.event.label.name == 'preview' && github.event.pull_request.state == 'open'
