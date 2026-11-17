@@ -46,6 +46,7 @@ let project = Project(
                 .package(product: "HermesAPI"),
                 .package(product: "HermesStore"),
                 .package(product: "HermesSecurity"),
+                .package(product: "HermesChat"),
             ]
         ),
         .target(

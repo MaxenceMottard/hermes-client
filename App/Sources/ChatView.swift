@@ -1,0 +1,70 @@
+import HermesAPI
+import HermesChat
+import SwiftUI
+
+/// Conversation screen: message list, composer, and Send / Stop.
+struct ChatView: View {
+    let session: ChatSession
+    @State private var draft = ""
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 12) {
+                    ForEach(Array(session.messages.enumerated()), id: \.offset) { _, message in
+                        MessageRow(message: message)
+                    }
+                }
+                .padding()
+            }
+
+            if case .failed(let error) = session.phase {
+                Text(error.errorDescription ?? "Unknown error")
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .padding(.horizontal)
+            }
+
+            HStack(alignment: .bottom, spacing: 8) {
+                TextField("Message", text: $draft, axis: .vertical)
+                    .textFieldStyle(.roundedBorder)
+                    .lineLimit(1 ... 5)
+
+                if session.isBusy {
+                    Button("Stop", systemImage: "stop.circle.fill") {
+                        session.stop()
+                    }
+                    .labelStyle(.iconOnly)
+                    .font(.title2)
+                } else {
+                    Button("Send", systemImage: "arrow.up.circle.fill") {
+                        let text = draft
+                        draft = ""
+                        Task { await session.send(text) }
+                    }
+                    .labelStyle(.iconOnly)
+                    .font(.title2)
+                    .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .padding()
+        }
+    }
+}
+
+private struct MessageRow: View {
+    let message: ChatMessage
+
+    var body: some View {
+        HStack {
+            if message.role == "user" { Spacer(minLength: 40) }
+            Text(message.content)
+                .padding(10)
+                .background(
+                    message.role == "user" ? Color.accentColor.opacity(0.2) : Color.secondary.opacity(0.12),
+                    in: RoundedRectangle(cornerRadius: 12)
+                )
+            if message.role != "user" { Spacer(minLength: 40) }
+        }
+    }
+}

@@ -1,8 +1,8 @@
 import HermesAPI
 
-/// The chat operations a session needs. `HermesClient` implements it; tests use a fake.
+/// The chat operation a session needs. `HermesClient` implements it; tests use a fake.
 public protocol ChatService: Sendable {
-    func chat(model: String, messages: [ChatMessage]) async throws -> String
+    func streamChat(model: String, messages: [ChatMessage]) -> AsyncThrowingStream<String, any Error>
 }
 
 extension HermesClient: ChatService {}
