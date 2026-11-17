@@ -17,6 +17,7 @@ concurrency:
 permissions:
   contents: read
   id-token: write # Tuist OIDC authentication
+  pull-requests: write # Remove the preview label
 
 env:
   # Tuist server project, read by Tuist.swift. Update if the Tuist project
@@ -24,26 +25,9 @@ env:
   TUIST_SERVER_FULL_HANDLE: mtm-capital/hermes-client
 
 jobs:
-  # Removes the label right away, so that adding it again triggers a new preview.
-  remove-label:
-    name: Remove preview label
-    if: github.event.label.name == 'preview' && github.event.pull_request.state == 'open'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      pull-requests: write
-    steps:
-      - name: Remove the preview label
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh pr edit "${{ github.event.pull_request.number }}" \
-            --repo "${{ github.repository }}" \
-            --remove-label preview
-
   preview:
     name: Tuist Preview
-    needs: remove-label
+    if: github.event.label.name == 'preview' && github.event.pull_request.state == 'open'
     runs-on: xcode-27
     timeout-minutes: 45
     env:
@@ -56,6 +40,14 @@ jobs:
       APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
       APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
     steps:
+      # First step, so that adding the label again triggers a new preview.
+      - name: Remove the preview label
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr edit "${{ github.event.pull_request.number }}" \
+            --repo "${{ github.repository }}" \
+            --remove-label preview
       - uses: actions/checkout@v7
       - uses: jdx/mise-action@v5
         with:
