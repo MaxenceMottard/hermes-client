@@ -1,8 +1,10 @@
 name: Preview
 
-# Builds the iOS app and shares it as a Tuist Preview when the `preview`
-# label is added to an open pull request. The preview always contains a
-# simulator build, plus a signed device build when the signing secrets exist.
+# Builds the iOS app and shares it as Tuist Previews when the `preview` label
+# is added to an open pull request:
+# - a simulator build (always),
+# - an ad hoc signed IPA, installable on the devices registered in the Apple
+#   Developer account (only when the App Store Connect API key secrets exist).
 on:
   pull_request:
     types: [labeled]
@@ -27,13 +29,11 @@ jobs:
     runs-on: xcode-27
     timeout-minutes: 45
     env:
-      # Device signing (optional, the device build is skipped without them):
-      # - BUILD_CERTIFICATE_BASE64: Apple Development certificate + private key (.p12), base64
-      # - P12_PASSWORD: password of the .p12
-      # - APP_STORE_CONNECT_API_KEY_BASE64: App Store Connect API key (.p8), base64
-      # - APP_STORE_CONNECT_KEY_ID / APP_STORE_CONNECT_ISSUER_ID: API key identifiers
-      BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
-      P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+      # App Store Connect API key with the Admin role, so that Xcode can sign
+      # with a cloud-managed Apple Distribution certificate and create the
+      # ad hoc provisioning profile. The device build is skipped without it.
+      # - APP_STORE_CONNECT_API_KEY_BASE64: the .p8 key, base64-encoded
+      # - APP_STORE_CONNECT_KEY_ID / APP_STORE_CONNECT_ISSUER_ID: key identifiers
       APP_STORE_CONNECT_API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
       APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
       APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
@@ -49,6 +49,7 @@ jobs:
         run: |
           tuist install
           tuist generate --no-open
+
       - name: Build for the iOS Simulator
         run: |
           tuist xcodebuild build \
@@ -56,52 +57,61 @@ jobs:
             -scheme Hermes \
             -configuration Debug \
             -sdk iphonesimulator
+      - name: Share simulator preview
+        run: tuist share Hermes --configuration Debug --platforms ios
 
-      - name: Install signing certificate and API key
-        id: signing
-        if: env.BUILD_CERTIFICATE_BASE64 != '' && env.APP_STORE_CONNECT_API_KEY_BASE64 != ''
+      - name: Install App Store Connect API key
+        id: api-key
+        if: env.APP_STORE_CONNECT_API_KEY_BASE64 != ''
         run: |
-          KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
-          KEYCHAIN_PASSWORD="$(uuidgen)"
-          CERT_PATH="$RUNNER_TEMP/certificate.p12"
           API_KEY_PATH="$RUNNER_TEMP/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
-
-          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o "$CERT_PATH"
           echo -n "$APP_STORE_CONNECT_API_KEY_BASE64" | base64 --decode -o "$API_KEY_PATH"
+          echo "path=$API_KEY_PATH" >> "$GITHUB_OUTPUT"
 
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security import "$CERT_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
-          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
-          rm "$CERT_PATH"
-
-          echo "keychain-path=$KEYCHAIN_PATH" >> "$GITHUB_OUTPUT"
-          echo "api-key-path=$API_KEY_PATH" >> "$GITHUB_OUTPUT"
-
-      # Automatic signing: Xcode fetches (or creates) the development
-      # provisioning profile through the App Store Connect API key. Only devices
-      # registered in the Apple Developer account can install this build.
-      - name: Build for iOS devices
-        if: steps.signing.outcome == 'success'
+      - name: Archive for iOS devices
+        if: steps.api-key.outcome == 'success'
         run: |
-          tuist xcodebuild build \
+          xcodebuild archive \
             -workspace Hermes.xcworkspace \
             -scheme Hermes \
-            -configuration Debug \
+            -configuration Release \
             -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/Hermes.xcarchive" \
             -allowProvisioningUpdates \
-            -authenticationKeyPath "${{ steps.signing.outputs.api-key-path }}" \
+            -authenticationKeyPath "${{ steps.api-key.outputs.path }}" \
             -authenticationKeyID "$APP_STORE_CONNECT_KEY_ID" \
             -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID"
 
-      # Shares every iOS build found in derived data (simulator, and device when built).
-      - name: Share preview
-        run: tuist share Hermes --configuration Debug --platforms ios
-
-      - name: Clean up signing
-        if: always() && steps.signing.outcome == 'success'
+      - name: Export ad hoc IPA
+        if: steps.api-key.outcome == 'success'
         run: |
-          security delete-keychain "${{ steps.signing.outputs.keychain-path }}" || true
-          rm -f "${{ steps.signing.outputs.api-key-path }}"
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>release-testing</string>
+            <key>signingStyle</key>
+            <string>automatic</string>
+            <key>teamID</key>
+            <string>S4J5D3N22R</string>
+          </dict>
+          </plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/Hermes.xcarchive" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "${{ steps.api-key.outputs.path }}" \
+            -authenticationKeyID "$APP_STORE_CONNECT_KEY_ID" \
+            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID"
+
+      - name: Share device preview
+        if: steps.api-key.outcome == 'success'
+        run: tuist share "$RUNNER_TEMP/export/Hermes.ipa"
+
+      - name: Remove App Store Connect API key
+        if: always() && steps.api-key.outcome == 'success'
+        run: rm -f "${{ steps.api-key.outputs.path }}"
