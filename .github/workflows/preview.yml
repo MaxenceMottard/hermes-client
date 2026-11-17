@@ -39,6 +39,11 @@ jobs:
       APP_STORE_CONNECT_API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
       APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
       APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      # Unique build number (CFBundleVersion) per run and attempt. Tuist rejects
+      # a build whose binary ID and build version were already uploaded, and the
+      # Debug executable is a stub (code lives in Hermes.debug.dylib) whose ID
+      # rarely changes between commits.
+      BUILD_NUMBER: ${{ github.run_number }}.${{ github.run_attempt }}
     steps:
       # First step, so that adding the label again triggers a new preview.
       - name: Remove the preview label
@@ -66,7 +71,8 @@ jobs:
             -workspace Hermes.xcworkspace \
             -scheme Hermes \
             -configuration Debug \
-            -sdk iphonesimulator
+            -sdk iphonesimulator \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
       - name: Share simulator preview
         run: tuist share Hermes --configuration Debug --platforms ios
 
@@ -90,7 +96,8 @@ jobs:
             -allowProvisioningUpdates \
             -authenticationKeyPath "${{ steps.api-key.outputs.path }}" \
             -authenticationKeyID "$APP_STORE_CONNECT_KEY_ID" \
-            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID"
+            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
 
       - name: Export ad hoc IPA
         if: steps.api-key.outcome == 'success'
