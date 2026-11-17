@@ -23,6 +23,9 @@ let project = Project(
             "SWIFT_UPCOMING_FEATURE_NONISOLATED_NONSENDING_BY_DEFAULT": "YES",
             "SWIFT_UPCOMING_FEATURE_INFER_ISOLATED_CONFORMANCES": "YES",
             "ENABLE_USER_SCRIPT_SANDBOXING": "YES",
+            // Build number (CFBundleVersion). CI previews override it with a
+            // unique value per run, see .github/workflows/preview.yml.
+            "CURRENT_PROJECT_VERSION": "1",
         ].automaticCodeSigning(devTeam: developmentTeam)
     ),
     targets: [
@@ -34,6 +37,7 @@ let project = Project(
             deploymentTargets: deploymentTargets,
             infoPlist: .extendingDefault(with: [
                 "CFBundleDisplayName": "Hermes",
+                "CFBundleVersion": "$(CURRENT_PROJECT_VERSION)",
                 "UILaunchScreen": [:],
             ]),
             sources: ["App/Sources/**"],
