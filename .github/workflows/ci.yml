@@ -26,7 +26,7 @@ jobs:
         run: swift test --package-path HermesKit
 
   app:
-    name: iOS app build
+    name: App build
     runs-on: xcode-27
     timeout-minutes: 30
     steps:
@@ -39,12 +39,19 @@ jobs:
         run: |
           tuist install
           tuist generate --no-open
-      - name: Build
+      - name: Build for iOS
         run: |
           xcodebuild build \
             -workspace Hermes.xcworkspace \
             -scheme Hermes \
             -destination 'generic/platform=iOS Simulator'
+      - name: Build for macOS
+        run: |
+          xcodebuild build \
+            -workspace Hermes.xcworkspace \
+            -scheme Hermes \
+            -destination 'generic/platform=macOS' \
+            CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=
       # App tests are disabled: slow, and the business logic is tested in HermesKit.
       # - name: Tests
       #   run: |

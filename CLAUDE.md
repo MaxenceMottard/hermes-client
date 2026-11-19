@@ -38,15 +38,16 @@ mise install
 # HermesKit package tests (swift test --package-path HermesKit)
 mise run test
 
-# Generate the Xcode project, then build the iOS app
+# Generate the Xcode project, then build the iOS or macOS app
 mise run generate
 mise run build
+mise run build-mac
 
 # App tests on an iOS 27 simulator (set IOS_DESTINATION to pick another simulator)
 mise run test-app
 ```
 
-CI: `.github/workflows/ci.yml` runs the HermesKit tests and builds the app on every PR and on `main`, on the `xcode-27` runner (macOS 27 + Xcode 27 preview image). App tests are slow and add little since the business logic lives in HermesKit, so they only run locally via `mise run test-app`.
+CI: `.github/workflows/ci.yml` runs the HermesKit tests and builds the app for iOS and macOS on every PR and on `main`, on the `xcode-27` runner (macOS 27 + Xcode 27 preview image). App tests are slow and add little since the business logic lives in HermesKit, so they only run locally via `mise run test-app`.
 
 ## Git
 

@@ -23,11 +23,10 @@ struct SettingsView: View {
             Form {
                 Section {
                     TextField("https://hermes.example.test", text: $baseURL)
-                        .keyboardType(.URL)
-                        .textInputAutocapitalization(.never)
+                        .urlEntry()
                         .autocorrectionDisabled()
                     TextField("Model name", text: $model)
-                        .textInputAutocapitalization(.never)
+                        .noAutocapitalization()
                         .autocorrectionDisabled()
                 } header: {
                     Text("Instance")
@@ -37,7 +36,7 @@ struct SettingsView: View {
 
                 Section {
                     SecureField("API key", text: $apiKey)
-                        .textInputAutocapitalization(.never)
+                        .noAutocapitalization()
                         .autocorrectionDisabled()
                 } header: {
                     Text("API key")
@@ -84,5 +83,24 @@ struct SettingsView: View {
         } catch {
             errorMessage = "The API key could not be saved on this device."
         }
+    }
+}
+
+/// Text entry tweaks that only exist on iOS; no-ops on macOS.
+private extension View {
+    func urlEntry() -> some View {
+        #if os(iOS)
+        keyboardType(.URL).textInputAutocapitalization(.never)
+        #else
+        self
+        #endif
+    }
+
+    func noAutocapitalization() -> some View {
+        #if os(iOS)
+        textInputAutocapitalization(.never)
+        #else
+        self
+        #endif
     }
 }
