@@ -107,6 +107,27 @@ public struct HermesClient: Sendable {
         }
     }
 
+    /// Sends the conversation without streaming and returns the text of the first choice.
+    public func chat(model: String, messages: [ChatMessage]) async throws -> String {
+        do {
+            let request = try makeRequest(model: model, messages: messages, stream: false)
+            let (data, response) = try await session.data(for: request)
+            try Self.validate(response)
+
+            let completion = try JSONDecoder().decode(ChatCompletion.self, from: data)
+            guard let content = completion.choices.first?.message.content else {
+                throw HermesAPIError.invalidResponse
+            }
+            return content
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as URLError where error.code == .cancelled {
+            throw CancellationError()
+        } catch {
+            throw HermesAPIError.from(error)
+        }
+    }
+
     /// Builds `POST {baseURL}/v1/chat/completions`. Internal for tests.
     func makeRequest(model: String, messages: [ChatMessage], stream: Bool) throws -> URLRequest {
         let relativePath = String(HermesAPIPaths.chatCompletions.drop(while: { $0 == "/" }))
