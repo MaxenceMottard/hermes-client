@@ -1,0 +1,11 @@
+data: {"id":"c1","choices":[{"index":0,"delta":{"role":"assistant","content":"Bon"},"finish_reason":null}]}
+
+: ping keep-alive
+event: message
+id: 42
+data: {"id":"c1","choices":[{"index":0,"delta":{"content":"jour"},"finish_reason":null}]}
+
+data: {"id":"c1","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+
+data: [DONE]
+data: {"ignored":true}
