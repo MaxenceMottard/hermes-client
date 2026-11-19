@@ -19,7 +19,10 @@ public final class ChatSession {
         case sending
         /// Text is arriving.
         case streaming
+        /// The request failed. The user message is kept so the reply can be retried.
         case failed(HermesAPIError)
+        /// The agent finished without any text. The user message is kept so the reply can be retried.
+        case emptyReply
     }
 
     public private(set) var messages: [ChatMessage] = []
@@ -39,22 +42,41 @@ public final class ChatSession {
         phase == .sending || phase == .streaming
     }
 
+    /// `true` when the last reply failed or came back empty and the user message can be sent again.
+    public var canRetry: Bool {
+        switch phase {
+        case .failed, .emptyReply:
+            messages.last?.role == "user"
+        default:
+            false
+        }
+    }
+
     /// Appends the user message, then streams the reply into a new assistant message.
     /// Blank input and sends issued while a reply is pending are ignored.
     public func send(_ text: String) async {
         let content = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !content.isEmpty, !isBusy else { return }
         messages.append(ChatMessage(role: "user", content: content))
+        await runReply()
+    }
 
-        let task = Task { await self.requestReply() }
-        sendTask = task
-        await task.value
-        sendTask = nil
+    /// Sends the last user message again after a failed or empty reply.
+    public func retry() async {
+        guard canRetry, !isBusy else { return }
+        await runReply()
     }
 
     /// Stops the reply in progress. The partial text is kept; an empty placeholder is removed.
     public func stop() {
         sendTask?.cancel()
+    }
+
+    private func runReply() async {
+        let task = Task { await self.requestReply() }
+        sendTask = task
+        await task.value
+        sendTask = nil
     }
 
     private func requestReply() async {
@@ -71,6 +93,9 @@ public final class ChatSession {
             if Task.isCancelled {
                 discardIfEmpty(index)
                 phase = .idle
+            } else if messages[index].content.isEmpty {
+                discardIfEmpty(index)
+                phase = .emptyReply
             } else {
                 phase = .idle
             }

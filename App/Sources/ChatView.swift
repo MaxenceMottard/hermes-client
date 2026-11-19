@@ -18,11 +18,24 @@ struct ChatView: View {
                 .padding()
             }
 
-            if case .failed(let error) = session.phase {
-                Text(error.errorDescription ?? "Unknown error")
-                    .font(.footnote)
-                    .foregroundStyle(.red)
-                    .padding(.horizontal)
+            if session.phase == .sending {
+                ProgressView()
+                    .padding(.bottom, 4)
+            }
+
+            if let message = failureMessage {
+                VStack(spacing: 6) {
+                    Text(message)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .multilineTextAlignment(.center)
+                    if session.canRetry {
+                        Button("Retry") {
+                            Task { await session.retry() }
+                        }
+                    }
+                }
+                .padding(.horizontal)
             }
 
             HStack(alignment: .bottom, spacing: 8) {
@@ -48,6 +61,19 @@ struct ChatView: View {
                 }
             }
             .padding()
+        }
+    }
+}
+
+private extension ChatView {
+    var failureMessage: String? {
+        switch session.phase {
+        case .failed(let error):
+            error.errorDescription ?? "Unknown error"
+        case .emptyReply:
+            "The agent sent an empty reply."
+        case .idle, .sending, .streaming:
+            nil
         }
     }
 }

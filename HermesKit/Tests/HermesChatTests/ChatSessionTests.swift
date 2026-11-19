@@ -135,4 +135,54 @@ struct ChatSessionTests {
         #expect(session.phase == .idle)
         #expect(session.messages.last == ChatMessage(role: "assistant", content: "Hel"))
     }
+
+    @Test("an empty reply sets emptyReply, leaves no placeholder, and can be retried")
+    func emptyReplyCanBeRetried() async {
+        let service = FakeChatService(scripts: [.deltas([]), .deltas(["Done"])])
+        let session = ChatSession(service: service, model: "m")
+
+        await session.send("Hi")
+        #expect(session.phase == .emptyReply)
+        #expect(session.canRetry)
+        #expect(session.messages == [ChatMessage(role: "user", content: "Hi")])
+
+        await session.retry()
+
+        #expect(session.phase == .idle)
+        #expect(
+            session.messages == [
+                ChatMessage(role: "user", content: "Hi"),
+                ChatMessage(role: "assistant", content: "Done"),
+            ])
+    }
+
+    @Test("retry resends the same history without duplicating the user message")
+    func retryResendsSameHistory() async {
+        let service = FakeChatService(scripts: [.fail(URLError(.timedOut)), .deltas(["Ok"])])
+        let session = ChatSession(service: service, model: "m")
+
+        await session.send("Hi")
+        #expect(session.phase == .failed(.timeout))
+
+        await session.retry()
+
+        let requests = service.recordedRequests()
+        #expect(requests.count == 2)
+        #expect(requests[0] == requests[1])
+        #expect(requests[1] == [ChatMessage(role: "user", content: "Hi")])
+        #expect(session.phase == .idle)
+    }
+
+    @Test("retry is ignored when there is nothing to retry")
+    func retryIgnoredWhenNotFailed() async {
+        let service = FakeChatService(scripts: [.deltas(["Hello"])])
+        let session = ChatSession(service: service, model: "m")
+
+        await session.send("Hi")
+        #expect(!session.canRetry)
+
+        await session.retry()
+
+        #expect(service.recordedRequests().count == 1)
+    }
 }
