@@ -84,7 +84,13 @@ private struct MessageRow: View {
     var body: some View {
         HStack {
             if message.role == "user" { Spacer(minLength: 40) }
-            Text(message.content)
+            Group {
+                if message.role == "user" {
+                    Text(message.content)
+                } else {
+                    MarkdownView(source: message.content)
+                }
+            }
                 .padding(10)
                 .background(
                     message.role == "user" ? Color.accentColor.opacity(0.2) : Color.secondary.opacity(0.12),
