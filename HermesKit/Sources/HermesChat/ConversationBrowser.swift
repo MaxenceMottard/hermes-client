@@ -8,6 +8,16 @@ import HermesStore
 /// Title given to a new conversation until its first message renames it.
 public enum ConversationTitle {
     public static let placeholder = "New conversation"
+
+    /// A title taken from the first message: its first line, trimmed, and cut to `limit` characters.
+    public static func derive(from text: String, limit: Int = 40) -> String {
+        let firstLine = text.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
+        let trimmed = firstLine.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return placeholder }
+        guard trimmed.count > limit else { return trimmed }
+        let cut = trimmed.prefix(limit).trimmingCharacters(in: .whitespacesAndNewlines)
+        return cut + "…"
+    }
 }
 
 /// The list of conversations and the one currently open. Keeps exactly one conversation open.

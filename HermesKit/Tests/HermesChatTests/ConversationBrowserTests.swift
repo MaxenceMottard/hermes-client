@@ -93,4 +93,14 @@ struct ConversationBrowserTests {
         try browser.rename(id, to: "   ")
         #expect(browser.summaries.first?.title == "Trip planning")
     }
+
+    @Test("a title is derived from the first line, trimmed and cut to the limit")
+    func deriveTitle() {
+        #expect(ConversationTitle.derive(from: "  Hello there\nsecond line") == "Hello there")
+        #expect(ConversationTitle.derive(from: "   \n  ") == ConversationTitle.placeholder)
+        #expect(ConversationTitle.derive(from: "Short") == "Short")
+        let long = String(repeating: "a", count: 60)
+        let derived = ConversationTitle.derive(from: long, limit: 10)
+        #expect(derived == String(repeating: "a", count: 10) + "…")
+    }
 }

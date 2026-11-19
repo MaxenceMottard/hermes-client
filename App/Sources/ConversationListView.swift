@@ -1,9 +1,12 @@
 import HermesChat
 import SwiftUI
 
-/// Sidebar list of conversations. Selecting a row opens it in the chat view.
+/// Sidebar list of conversations. Selecting a row opens it. Rows can be renamed or deleted.
 struct ConversationListView: View {
     let browser: ConversationBrowser
+
+    @State private var renamingID: UUID?
+    @State private var draftTitle = ""
 
     var body: some View {
         List(selection: selection) {
@@ -16,8 +19,39 @@ struct ConversationListView: View {
                         .foregroundStyle(.secondary)
                 }
                 .tag(summary.id)
+                .contextMenu {
+                    Button("Rename", systemImage: "pencil") {
+                        draftTitle = summary.title
+                        renamingID = summary.id
+                    }
+                    Button("Delete", systemImage: "trash", role: .destructive) {
+                        try? browser.delete(summary.id)
+                    }
+                }
+                .swipeActions(edge: .trailing) {
+                    Button("Delete", systemImage: "trash", role: .destructive) {
+                        try? browser.delete(summary.id)
+                    }
+                    Button("Rename", systemImage: "pencil") {
+                        draftTitle = summary.title
+                        renamingID = summary.id
+                    }
+                    .tint(.indigo)
+                }
             }
             .onDelete(perform: delete)
+        }
+        .alert("Rename conversation", isPresented: isRenaming) {
+            TextField("Title", text: $draftTitle)
+            Button("Save") {
+                if let id = renamingID {
+                    try? browser.rename(id, to: draftTitle)
+                }
+                renamingID = nil
+            }
+            Button("Cancel", role: .cancel) {
+                renamingID = nil
+            }
         }
     }
 
@@ -25,6 +59,13 @@ struct ConversationListView: View {
         Binding(
             get: { browser.selectedID },
             set: { browser.select($0) }
+        )
+    }
+
+    private var isRenaming: Binding<Bool> {
+        Binding(
+            get: { renamingID != nil },
+            set: { if !$0 { renamingID = nil } }
         )
     }
 
