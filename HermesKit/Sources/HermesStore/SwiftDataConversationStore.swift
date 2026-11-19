@@ -39,6 +39,9 @@
     /// `ConversationStore` backed by SwiftData. Use `makeContainer` to create the container.
     @MainActor
     public final class SwiftDataConversationStore: ConversationStore {
+        /// Kept alive on purpose: a `ModelContext` does not retain its container, and saving after the
+        /// container is released traps inside SwiftData.
+        private let container: ModelContainer
         private let context: ModelContext
 
         public static func makeContainer(inMemory: Bool = false) throws -> ModelContainer {
@@ -48,6 +51,7 @@
         }
 
         public init(container: ModelContainer) {
+            self.container = container
             context = container.mainContext
         }
 
