@@ -16,7 +16,7 @@ final class AppState {
 
     init(
         settingsStorage: any SettingsStorage = UserDefaultsSettingsStorage(),
-        secrets: any SecretStore = InMemorySecretStore()
+        secrets: any SecretStore = KeychainSecretStore()
     ) {
         self.settingsStorage = settingsStorage
         self.secrets = secrets
