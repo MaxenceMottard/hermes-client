@@ -33,7 +33,8 @@ let package = Package(
         ),
         .testTarget(
             name: "HermesAPITests",
-            dependencies: ["HermesAPI"]
+            dependencies: ["HermesAPI"],
+            resources: [.process("Fixtures")]
         ),
         .testTarget(
             name: "HermesStoreTests",
