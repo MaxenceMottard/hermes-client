@@ -16,10 +16,16 @@ let package = Package(
         .library(name: "HermesAPI", targets: ["HermesAPI"]),
         .library(name: "HermesStore", targets: ["HermesStore"]),
         .library(name: "HermesSecurity", targets: ["HermesSecurity"]),
+        .library(name: "HermesChat", targets: ["HermesChat"]),
     ],
     targets: [
         .target(
             name: "HermesAPI",
+            swiftSettings: strictConcurrency
+        ),
+        .target(
+            name: "HermesChat",
+            dependencies: ["HermesAPI"],
             swiftSettings: strictConcurrency
         ),
         .target(
@@ -35,6 +41,10 @@ let package = Package(
             name: "HermesAPITests",
             dependencies: ["HermesAPI"],
             resources: [.process("Fixtures")]
+        ),
+        .testTarget(
+            name: "HermesChatTests",
+            dependencies: ["HermesChat"]
         ),
         .testTarget(
             name: "HermesStoreTests",
