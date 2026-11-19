@@ -17,6 +17,11 @@ description = "Build the iOS app (generic simulator destination)"
 depends = ["generate"]
 run = "xcodebuild -workspace Hermes.xcworkspace -scheme Hermes -destination 'generic/platform=iOS Simulator' build"
 
+[tasks.build-mac]
+description = "Build the macOS app"
+depends = ["generate"]
+run = "xcodebuild -workspace Hermes.xcworkspace -scheme Hermes -destination 'generic/platform=macOS' build"
+
 [tasks.test-app]
 description = "Run the app tests on a simulator (override the destination with IOS_DESTINATION)"
 depends = ["generate"]

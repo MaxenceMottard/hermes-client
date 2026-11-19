@@ -1,7 +1,7 @@
 import ProjectDescription
 
 let bundleIdPrefix = "dev.mtmcapital.hermes"
-let deploymentTargets: DeploymentTargets = .iOS("27.0")
+let deploymentTargets: DeploymentTargets = .multiplatform(iOS: "27.0", macOS: "27.0")
 
 /// Apple Developer team used for automatic code signing.
 let developmentTeam = "S4J5D3N22R"
@@ -26,12 +26,17 @@ let project = Project(
             // Build number (CFBundleVersion). CI previews override it with a
             // unique value per run, see .github/workflows/preview.yml.
             "CURRENT_PROJECT_VERSION": "1",
+            // macOS: sandboxed app that only needs outgoing connections to the
+            // Hermes instance. Ignored by the iOS SDK.
+            "ENABLE_APP_SANDBOX": "YES",
+            "ENABLE_OUTGOING_NETWORK_CONNECTIONS": "YES",
+            "ENABLE_HARDENED_RUNTIME": "YES",
         ].automaticCodeSigning(devTeam: developmentTeam)
     ),
     targets: [
         .target(
             name: "Hermes",
-            destinations: [.iPhone, .iPad],
+            destinations: [.iPhone, .iPad, .mac],
             product: .app,
             bundleId: bundleIdPrefix,
             deploymentTargets: deploymentTargets,
@@ -51,7 +56,7 @@ let project = Project(
         ),
         .target(
             name: "HermesTests",
-            destinations: [.iPhone, .iPad],
+            destinations: [.iPhone, .iPad, .mac],
             product: .unitTests,
             bundleId: "\(bundleIdPrefix).tests",
             deploymentTargets: deploymentTargets,

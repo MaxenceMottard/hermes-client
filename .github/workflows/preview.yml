@@ -1,8 +1,10 @@
 name: Preview
 
-# Builds the iOS app and shares it as Tuist Previews when the `preview` label
+# Builds the app and shares it as Tuist Previews when the `preview` label
 # is added to an open pull request:
-# - a simulator build (always),
+# - an iOS simulator build (always),
+# - an ad hoc signed macOS build (always). No certificate is needed, but
+#   macOS asks again for Keychain access after each new build,
 # - an ad hoc signed IPA, installable on the devices registered in the Apple
 #   Developer account (only when the App Store Connect API key secrets exist).
 # The label is removed as soon as the run starts: add it again to rebuild.
@@ -75,6 +77,18 @@ jobs:
             CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
       - name: Share simulator preview
         run: tuist share Hermes --configuration Debug --platforms ios
+
+      - name: Build for macOS
+        run: |
+          tuist xcodebuild build \
+            -workspace Hermes.xcworkspace \
+            -scheme Hermes \
+            -configuration Debug \
+            -destination 'generic/platform=macOS' \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+            CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=
+      - name: Share macOS preview
+        run: tuist share Hermes --configuration Debug --platforms macos
 
       - name: Install App Store Connect API key
         id: api-key

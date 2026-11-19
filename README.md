@@ -11,7 +11,7 @@ See the [milestones](../../milestones): OpenAI-compatible API client with SSE st
 ## Structure
 
 ```
-App/                iOS app sources, resources and tests (UI only)
+App/                iOS/macOS app sources, resources and tests (UI only)
 Project.swift       Tuist manifest (the .xcodeproj is generated, not committed)
 Tuist.swift         Tuist configuration
 mise.toml           project tools (tuist) and tasks
@@ -38,7 +38,7 @@ mise run generate     # generates Hermes.xcworkspace
 open Hermes.xcworkspace
 ```
 
-`mise run build` builds the app from the command line, `mise run test-app` runs its tests on a simulator.
+`mise run build` and `mise run build-mac` build the iOS and macOS apps from the command line, `mise run test-app` runs its tests on a simulator.
 
 The GitHub Actions CI (`.github/workflows/ci.yml`) runs the HermesKit tests and builds the app on every PR. App tests do not run in CI: the business logic is tested in HermesKit.
 
