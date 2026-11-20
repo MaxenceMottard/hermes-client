@@ -83,9 +83,11 @@ struct ConversationBrowserRemoteTests {
         await waitForPendingRequest(source)
         await source.release()
         let transcript = try #require(browser.openedRemote)
-        await transcript.load()
+        // Waits for the request the browser started; calling `load()` here could send a second one.
+        await waitUntilLoadEnds(transcript)
 
         #expect(await source.requestCount == 1)
+        #expect(transcript.state == .loaded)
         #expect(transcript.lines.map(\.text) == ["Hi"])
     }
 

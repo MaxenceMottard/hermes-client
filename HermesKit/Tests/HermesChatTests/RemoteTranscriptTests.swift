@@ -33,10 +33,13 @@ actor FakeMessageSource: SessionListing {
 }
 
 /// Holds each message request until `release()`, then answers it, or throws `CancellationError` if the
-/// requesting task was cancelled meanwhile, as `URLSession` does.
+/// requesting task was cancelled meanwhile, as `URLSession` does. Once released, the gate stays open:
+/// a later request is answered at once, so an unexpected extra request fails the count check instead
+/// of hanging the test.
 actor GatedMessageSource: SessionListing {
     private let page: SessionMessagesPage
     private var waiting: [CheckedContinuation<Void, Never>] = []
+    private var isOpen = false
     private(set) var requestCount = 0
 
     init(page: SessionMessagesPage) {
@@ -46,6 +49,7 @@ actor GatedMessageSource: SessionListing {
     var pendingCount: Int { waiting.count }
 
     func release() {
+        isOpen = true
         let continuations = waiting
         waiting = []
         continuations.forEach { $0.resume() }
@@ -57,7 +61,9 @@ actor GatedMessageSource: SessionListing {
 
     func listSessionMessages(sessionID: String, limit: Int, offset: Int) async throws -> SessionMessagesPage {
         requestCount += 1
-        await withCheckedContinuation { waiting.append($0) }
+        if !isOpen {
+            await withCheckedContinuation { waiting.append($0) }
+        }
         try Task.checkCancellation()
         return page
     }
@@ -71,10 +77,22 @@ actor GatedMessageSource: SessionListing {
     }
 }
 
-/// Waits until the source holds a request.
+/// Waits until the source holds a request. Gives up after 5 seconds so that a request that is never sent
+/// fails the test instead of hanging it.
 func waitForPendingRequest(_ source: GatedMessageSource) async {
-    while await source.pendingCount == 0 {
+    let deadline = ContinuousClock.now + .seconds(5)
+    while await source.pendingCount == 0, ContinuousClock.now < deadline {
         await Task.yield()
+    }
+}
+
+/// Waits until the page request in flight ends, without starting one. Gives up after 5 seconds so that
+/// a request that never ends fails the test instead of hanging it.
+@MainActor
+func waitUntilLoadEnds(_ transcript: RemoteTranscript) async {
+    let deadline = ContinuousClock.now + .seconds(5)
+    while transcript.state == .loading, ContinuousClock.now < deadline {
+        try? await Task.sleep(for: .milliseconds(1))
     }
 }
 
