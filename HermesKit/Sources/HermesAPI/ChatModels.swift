@@ -79,14 +79,20 @@ private struct ImageURLPart: Encodable {
     let url: String
 }
 
-/// Body of `POST /v1/chat/completions`. Encodes exactly `model`, `messages` and `stream`.
+/// Body of `POST /v1/chat/completions`. Encodes `model`, `messages`, `stream`, and `provider` when set.
+///
+/// The instance ignores a `model` sent without a `provider` (unless its `direct_model_requests` option is on):
+/// to talk to a provider model such as an Anthropic or OpenAI one, both must be sent.
 public struct ChatRequest: Encodable, Sendable, Equatable {
     public var model: String
+    /// Provider slug from `GET /api/model/options` (for example `anthropic`). `nil` is not encoded.
+    public var provider: String?
     public var messages: [ChatMessage]
     public var stream: Bool
 
-    public init(model: String, messages: [ChatMessage], stream: Bool) {
+    public init(model: String, provider: String? = nil, messages: [ChatMessage], stream: Bool) {
         self.model = model
+        self.provider = provider
         self.messages = messages
         self.stream = stream
     }

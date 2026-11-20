@@ -1,0 +1,32 @@
+{
+  "model": "claude-opus-test",
+  "provider": "anthropic",
+  "providers": [
+    {
+      "slug": "anthropic",
+      "name": "Anthropic",
+      "models": ["claude-opus-test", "claude-sonnet-test", "claude-retired-test"],
+      "unavailable_models": ["claude-retired-test"],
+      "is_current": true,
+      "authenticated": true,
+      "pricing": {"claude-opus-test": {"input": "$5", "output": "$25", "free": false}}
+    },
+    {
+      "slug": "openai",
+      "name": "OpenAI",
+      "models": ["gpt-test"],
+      "is_current": false
+    },
+    {
+      "slug": "xai",
+      "name": "xAI",
+      "models": ["grok-test"],
+      "authenticated": false
+    },
+    {
+      "slug": "empty",
+      "name": "Empty",
+      "models": []
+    }
+  ]
+}

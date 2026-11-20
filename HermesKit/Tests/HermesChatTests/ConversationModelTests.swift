@@ -75,4 +75,50 @@ struct ConversationModelTests {
 
         #expect(browser.session?.model == "default-model")
     }
+
+    @Test("a session sends the provider saved with its conversation")
+    func sessionSendsStoredProvider() async throws {
+        let store = InMemoryConversationStore()
+        let conversation = try store.createConversation(title: "T", model: "opus", provider: "anthropic")
+        let service = FakeChatService(scripts: [.deltas(["Hi"])])
+        let session = ChatSession(service: service, model: "default-model", store: store, conversationID: conversation.id)
+
+        await session.send("Hello")
+
+        #expect(session.modelChoice == ModelChoice(model: "opus", provider: "anthropic"))
+        #expect(service.recordedModels() == ["opus"])
+        #expect(service.recordedProviders() == ["anthropic"])
+    }
+
+    @Test("a conversation saved with a model but no provider sends none, whatever the fallback")
+    func sessionWithoutProvider() async throws {
+        let store = InMemoryConversationStore()
+        let conversation = try store.createConversation(title: "T", model: "hermes-agent")
+        let service = FakeChatService(scripts: [.deltas(["Hi"])])
+        let session = ChatSession(
+            service: service, model: "default-model", provider: "ignored", store: store, conversationID: conversation.id)
+
+        await session.send("Hello")
+
+        #expect(service.recordedProviders() == [nil])
+    }
+
+    @Test("createConversation(model:provider:) saves both and drops a blank provider")
+    func createWithProvider() throws {
+        let store = InMemoryConversationStore()
+        let browser = ConversationBrowser(store: store, service: FakeChatService(scripts: []), model: "default-model")
+
+        let withProvider = try browser.createConversation(model: "opus", provider: "anthropic")
+        let blankProvider = try browser.createConversation(model: "fast", provider: "  ")
+
+        #expect(try store.conversation(id: withProvider)?.provider == "anthropic")
+        #expect(browser.summaries.first { $0.id == withProvider }?.provider == "anthropic")
+        #expect(try store.conversation(id: blankProvider)?.provider == nil)
+    }
+
+    @Test("the display name shows the provider before the model")
+    func displayName() {
+        #expect(ModelChoice(model: "opus", provider: "anthropic").displayName == "anthropic · opus")
+        #expect(ModelChoice(model: "hermes-agent").displayName == "hermes-agent")
+    }
 }

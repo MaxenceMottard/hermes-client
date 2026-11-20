@@ -19,6 +19,7 @@ final class FakeChatService: ChatService, @unchecked Sendable {
     private var scripts: [Script]
     private var requests: [[ChatMessage]] = []
     private var models: [String] = []
+    private var providers: [String?] = []
 
     init(scripts: [Script]) {
         self.scripts = scripts
@@ -37,10 +38,18 @@ final class FakeChatService: ChatService, @unchecked Sendable {
         return models
     }
 
-    func streamChat(model: String, messages: [ChatMessage]) -> AsyncThrowingStream<String, any Error> {
+    /// The provider of each request, in order.
+    func recordedProviders() -> [String?] {
+        lock.lock()
+        defer { lock.unlock() }
+        return providers
+    }
+
+    func streamChat(model: String, provider: String?, messages: [ChatMessage]) -> AsyncThrowingStream<String, any Error> {
         lock.lock()
         requests.append(messages)
         models.append(model)
+        providers.append(provider)
         let script = scripts.isEmpty ? Script.deltas([]) : scripts.removeFirst()
         lock.unlock()
 

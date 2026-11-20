@@ -23,7 +23,7 @@ struct LastModelStorageTests {
     func defaultWhenNothingSaved() {
         let browser = makeBrowser(lastModel: InMemoryLastModelStorage())
 
-        #expect(browser.preferredModel == "default-model")
+        #expect(browser.preferredChoice == ModelChoice(model: "default-model"))
         #expect(browser.session?.model == "default-model")
     }
 
@@ -32,33 +32,35 @@ struct LastModelStorageTests {
         let storage = InMemoryLastModelStorage()
         let browser = makeBrowser(lastModel: storage)
 
-        try browser.createConversation(model: "other-model")
+        try browser.createConversation(model: "opus", provider: "anthropic")
 
-        #expect(storage.load() == "other-model")
-        #expect(browser.preferredModel == "other-model")
+        #expect(storage.load() == ModelChoice(model: "opus", provider: "anthropic"))
+        #expect(browser.preferredChoice == ModelChoice(model: "opus", provider: "anthropic"))
     }
 
     @Test("the first conversation starts on the last used model")
     func firstConversationUsesLastModel() {
         let store = InMemoryConversationStore()
-        let browser = makeBrowser(store: store, lastModel: InMemoryLastModelStorage(model: "saved-model"))
+        let browser = makeBrowser(
+            store: store, lastModel: InMemoryLastModelStorage(choice: ModelChoice(model: "opus", provider: "anthropic")))
 
-        #expect(browser.summaries.first?.model == "saved-model")
-        #expect(browser.session?.model == "saved-model")
+        #expect(browser.summaries.first?.model == "opus")
+        #expect(browser.summaries.first?.provider == "anthropic")
+        #expect(browser.session?.modelChoice == ModelChoice(model: "opus", provider: "anthropic"))
     }
 
     @Test("a conversation created without a choice uses the last model and saves nothing")
     func noChoiceUsesLastModel() throws {
-        let storage = InMemoryLastModelStorage(model: "saved-model")
+        let storage = InMemoryLastModelStorage(choice: ModelChoice(model: "saved-model"))
         let browser = makeBrowser(lastModel: storage)
 
         let id = try browser.createConversation()
 
         #expect(browser.summaries.first { $0.id == id }?.model == "saved-model")
-        #expect(storage.load() == "saved-model")
+        #expect(storage.load() == ModelChoice(model: "saved-model"))
     }
 
-    @Test("UserDefaults storage keeps the model across instances and ignores blank values")
+    @Test("UserDefaults storage keeps the model and provider across instances and ignores blank values")
     func userDefaultsRoundTrip() throws {
         let suite = "LastModelStorageTests-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
@@ -66,10 +68,14 @@ struct LastModelStorageTests {
 
         #expect(UserDefaultsLastModelStorage(defaults: defaults).load() == nil)
 
-        UserDefaultsLastModelStorage(defaults: defaults).save("some-model")
-        #expect(UserDefaultsLastModelStorage(defaults: defaults).load() == "some-model")
+        UserDefaultsLastModelStorage(defaults: defaults).save(ModelChoice(model: "opus", provider: "anthropic"))
+        #expect(
+            UserDefaultsLastModelStorage(defaults: defaults).load() == ModelChoice(model: "opus", provider: "anthropic"))
 
-        defaults.set("   ", forKey: UserDefaultsLastModelStorage.key)
+        UserDefaultsLastModelStorage(defaults: defaults).save(ModelChoice(model: "hermes-agent"))
+        #expect(UserDefaultsLastModelStorage(defaults: defaults).load() == ModelChoice(model: "hermes-agent"))
+
+        defaults.set("   ", forKey: UserDefaultsLastModelStorage.modelKey)
         #expect(UserDefaultsLastModelStorage(defaults: defaults).load() == nil)
     }
 }

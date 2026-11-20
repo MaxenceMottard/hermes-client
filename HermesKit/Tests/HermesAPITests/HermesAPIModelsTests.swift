@@ -37,6 +37,16 @@ struct HermesAPIModelsTests {
         #expect(object["stream"] as? Bool == true)
     }
 
+    @Test("the provider is encoded only when set")
+    func requestProvider() throws {
+        let withProvider = try jsonObject(
+            JSONEncoder().encode(ChatRequest(model: "m", provider: "anthropic", messages: [], stream: true)))
+        #expect(withProvider["provider"] as? String == "anthropic")
+
+        let without = try jsonObject(JSONEncoder().encode(ChatRequest(model: "m", messages: [], stream: true)))
+        #expect(without["provider"] == nil)
+    }
+
     @Test("a non-streamed response decodes and re-encodes without loss")
     func completionRoundTrip() throws {
         let decoded = try JSONDecoder().decode(ChatCompletion.self, from: fixture("chat_completion"))

@@ -32,4 +32,10 @@ public enum HermesAPIPaths {
     public static func sessionChatStream(_ sessionID: String) -> String {
         "\(sessions)/\(sessionID)/chat/stream"
     }
+
+    /// Provider model catalog, the one the dashboard's model picker shows (models grouped by provider).
+    /// `/v1/models` only lists the virtual `hermes-agent` model and the configured aliases.
+    /// needs-verification: read from the Hermes gateway source (`GET /api/model/options`, Bearer auth);
+    /// not checked on the real instance yet.
+    public static let modelOptions = "/api/model/options"
 }

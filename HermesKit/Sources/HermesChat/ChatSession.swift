@@ -38,6 +38,13 @@ public final class ChatSession {
     public private(set) var phase: Phase = .idle
     /// The model every request of this session is sent to.
     public let model: String
+    /// The provider of `model`, sent with every request. `nil` lets the instance pick.
+    public let provider: String?
+
+    /// `model` and `provider` together.
+    public var modelChoice: ModelChoice {
+        ModelChoice(model: model, provider: provider)
+    }
 
     private let service: any ChatService
     private let store: (any ConversationStore)?
@@ -46,10 +53,11 @@ public final class ChatSession {
 
     /// Without a store, the session lives in memory only. With a store and a conversation id, it loads the
     /// saved messages and saves to that conversation. A model saved with the conversation takes precedence
-    /// over `model`, which is then only the fallback for conversations saved without one.
+    /// over `model` and `provider`, which are then only the fallback for conversations saved without one.
     public init(
         service: any ChatService,
         model: String,
+        provider: String? = nil,
         store: (any ConversationStore)? = nil,
         conversationID: UUID? = nil
     ) {
@@ -57,7 +65,13 @@ public final class ChatSession {
         self.store = store
         self.conversationID = conversationID
         let saved = conversationID.flatMap { id in try? store?.conversation(id: id) }
-        self.model = saved?.model ?? model
+        if let savedModel = saved?.model {
+            self.model = savedModel
+            self.provider = saved?.provider
+        } else {
+            self.model = model
+            self.provider = provider
+        }
         if let saved {
             messages = saved.messages.map { ChatMessage(role: $0.role, content: $0.content) }
         }
@@ -121,7 +135,7 @@ public final class ChatSession {
         defer { persist() }
 
         do {
-            for try await delta in service.streamChat(model: model, messages: history) {
+            for try await delta in service.streamChat(model: model, provider: provider, messages: history) {
                 messages[index].content += delta
                 phase = .streaming
                 deltaCount += 1

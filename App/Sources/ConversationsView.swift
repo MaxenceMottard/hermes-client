@@ -28,7 +28,7 @@ struct ConversationsView: View {
             } else if let session = browser.session {
                 ChatView(session: session)
                     .navigationTitle(currentTitle)
-                    .navigationSubtitle(session.model)
+                    .navigationSubtitle(session.modelChoice.displayName)
                     .inlineNavigationTitle()
                     .toolbar {
                         if let export = currentExport {
@@ -43,8 +43,12 @@ struct ConversationsView: View {
             browser.refresh()
         }
         .sheet(isPresented: $isChoosingModel) {
-            NewConversationView(catalog: modelCatalog, preferredModel: browser.preferredModel) { model in
-                _ = try? browser.createConversation(model: model)
+            NewConversationView(
+                catalog: modelCatalog,
+                preferred: browser.preferredChoice,
+                defaultChoice: browser.defaultChoice
+            ) { choice in
+                _ = try? browser.createConversation(model: choice.model, provider: choice.provider)
             }
         }
     }

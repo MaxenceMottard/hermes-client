@@ -17,6 +17,8 @@ public struct StoredConversation: Equatable, Sendable, Identifiable {
     public var title: String
     /// The model the conversation talks to. `nil` for conversations saved before models were stored.
     public var model: String?
+    /// Provider slug of `model` (for example `anthropic`). `nil` when the instance picks the provider.
+    public var provider: String?
     public var createdAt: Date
     public var updatedAt: Date
     public var messages: [StoredMessage]
@@ -25,6 +27,7 @@ public struct StoredConversation: Equatable, Sendable, Identifiable {
         id: UUID,
         title: String,
         model: String? = nil,
+        provider: String? = nil,
         createdAt: Date,
         updatedAt: Date,
         messages: [StoredMessage]
@@ -32,6 +35,7 @@ public struct StoredConversation: Equatable, Sendable, Identifiable {
         self.id = id
         self.title = title
         self.model = model
+        self.provider = provider
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.messages = messages
@@ -44,12 +48,15 @@ public struct ConversationSummary: Equatable, Sendable, Identifiable {
     public var title: String
     /// The model of the conversation, `nil` when it was saved without one.
     public var model: String?
+    /// Provider slug of `model`, `nil` when the instance picks the provider.
+    public var provider: String?
     public var updatedAt: Date
 
-    public init(id: UUID, title: String, model: String? = nil, updatedAt: Date) {
+    public init(id: UUID, title: String, model: String? = nil, provider: String? = nil, updatedAt: Date) {
         self.id = id
         self.title = title
         self.model = model
+        self.provider = provider
         self.updatedAt = updatedAt
     }
 }
@@ -65,9 +72,9 @@ public protocol ConversationStore: AnyObject {
     /// All conversations, most recently updated first.
     func summaries() throws -> [ConversationSummary]
     func conversation(id: UUID) throws -> StoredConversation?
-    /// Creates an empty conversation bound to `model` (`nil` leaves it unset).
+    /// Creates an empty conversation bound to `model` on `provider` (`nil` leaves them unset).
     @discardableResult
-    func createConversation(title: String, model: String?) throws -> StoredConversation
+    func createConversation(title: String, model: String?, provider: String?) throws -> StoredConversation
     /// Replaces every message of the conversation and bumps its `updatedAt`.
     func replaceMessages(_ messages: [StoredMessage], inConversation id: UUID) throws
     /// Renames the conversation. Does not change its position in the list.
@@ -79,7 +86,13 @@ extension ConversationStore {
     /// Creates an empty conversation with no model set.
     @discardableResult
     public func createConversation(title: String) throws -> StoredConversation {
-        try createConversation(title: title, model: nil)
+        try createConversation(title: title, model: nil, provider: nil)
+    }
+
+    /// Creates an empty conversation bound to `model`, with no provider set.
+    @discardableResult
+    public func createConversation(title: String, model: String?) throws -> StoredConversation {
+        try createConversation(title: title, model: model, provider: nil)
     }
 }
 
@@ -96,17 +109,20 @@ public final class InMemoryConversationStore: ConversationStore {
     public func summaries() throws -> [ConversationSummary] {
         conversations.values
             .sorted { $0.updatedAt > $1.updatedAt }
-            .map { ConversationSummary(id: $0.id, title: $0.title, model: $0.model, updatedAt: $0.updatedAt) }
+            .map {
+                ConversationSummary(
+                    id: $0.id, title: $0.title, model: $0.model, provider: $0.provider, updatedAt: $0.updatedAt)
+            }
     }
 
     public func conversation(id: UUID) throws -> StoredConversation? {
         conversations[id]
     }
 
-    public func createConversation(title: String, model: String?) throws -> StoredConversation {
+    public func createConversation(title: String, model: String?, provider: String?) throws -> StoredConversation {
         let date = now()
         let conversation = StoredConversation(
-            id: UUID(), title: title, model: model, createdAt: date, updatedAt: date, messages: []
+            id: UUID(), title: title, model: model, provider: provider, createdAt: date, updatedAt: date, messages: []
         )
         conversations[conversation.id] = conversation
         return conversation
