@@ -23,20 +23,24 @@ struct ConversationsView: View {
                     }
                 }
         } detail: {
-            if let remote = browser.openedRemote {
-                RemoteChatView(transcript: remote)
-            } else if let session = browser.session {
-                ChatView(session: session)
-                    .navigationTitle(currentTitle)
-                    .inlineNavigationTitle()
-                    .toolbar {
-                        if let export = currentExport {
-                            ToolbarItem(placement: .primaryAction) {
-                                ExportLink(export: export)
+            Group {
+                if let remote = browser.openedRemote {
+                    RemoteChatView(transcript: remote)
+                } else if let session = browser.session {
+                    ChatView(session: session)
+                        .navigationTitle(currentTitle)
+                        .inlineNavigationTitle()
+                        .toolbar {
+                            if let export = currentExport {
+                                ToolbarItem(placement: .primaryAction) {
+                                    ExportLink(export: export)
+                                }
                             }
                         }
-                    }
+                }
             }
+            // On iPhone an open conversation fills the screen: the tab bar comes back with the list.
+            .hidesTabBarWhenCompact()
         }
         .onChange(of: browser.session?.phase) {
             browser.refresh()
