@@ -25,9 +25,7 @@ struct ConversationsView: View {
                     .toolbar {
                         if let export = currentExport {
                             ToolbarItem(placement: .primaryAction) {
-                                ShareLink(item: ConversationFile(export: export)) {
-                                    Label("Export as Markdown", systemImage: "square.and.arrow.up")
-                                }
+                                ExportLink(export: export)
                             }
                         }
                     }
