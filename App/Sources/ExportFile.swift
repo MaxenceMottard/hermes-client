@@ -1,5 +1,6 @@
 import Foundation
 import HermesChat
+import SwiftUI
 
 /// Writes a conversation export to a temporary Markdown file, so that it can be shared with `ShareLink`.
 enum ExportFile {
