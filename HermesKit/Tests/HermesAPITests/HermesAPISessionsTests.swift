@@ -34,7 +34,7 @@ final class SessionsURLProtocol: URLProtocol {
 
     override func startLoading() {
         Self.requests.append(request)
-        Self.bodies.append(request.httpBody ?? Data())
+        Self.bodies.append(Self.readBody(request))
         let reply = Self.responder?(request) ?? SessionsReply(status: 500)
         if let failure = reply.failure {
             client?.urlProtocol(self, didFailWithError: failure)
@@ -53,6 +53,22 @@ final class SessionsURLProtocol: URLProtocol {
     }
 
     override func stopLoading() {}
+
+    /// On Darwin, URLSession hands the body to a URLProtocol as a stream, not as `httpBody`.
+    private static func readBody(_ request: URLRequest) -> Data {
+        if let body = request.httpBody { return body }
+        guard let stream = request.httpBodyStream else { return Data() }
+        stream.open()
+        defer { stream.close() }
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 1024)
+        while stream.hasBytesAvailable {
+            let read = stream.read(&buffer, maxLength: buffer.count)
+            if read <= 0 { break }
+            data.append(buffer, count: read)
+        }
+        return data
+    }
 }
 
 @Suite("HermesClient.listSessions", .serialized)
