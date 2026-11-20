@@ -4,8 +4,8 @@ import HermesStore
 import SwiftUI
 
 /// Sidebar: one list of the conversations on this device and the sessions on the Hermes instance,
-/// most recently used first. Local conversations open and can be renamed or deleted. Remote sessions
-/// are not openable yet, so their rows are plain.
+/// most recently used first. Local conversations open and can be renamed or deleted. A remote session
+/// opens read-only in the detail pane.
 struct ConversationListView: View {
     let browser: ConversationBrowser
 
@@ -61,7 +61,7 @@ struct ConversationListView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
-        .tag(summary.id)
+        .tag(SidebarEntry.localID(summary.id))
         .contextMenu {
             Button("Rename", systemImage: "pencil") {
                 draftTitle = summary.title
@@ -93,12 +93,15 @@ struct ConversationListView: View {
                     .foregroundStyle(.secondary)
             }
         }
+        .tag(SidebarEntry.remoteID(session.id))
     }
 
-    private var selection: Binding<UUID?> {
+    /// One selection for local and remote rows. On compact widths the split view collapses into a
+    /// stack, and only the list selection pushes the detail: a row outside it never opens.
+    private var selection: Binding<String?> {
         Binding(
-            get: { browser.selectedID },
-            set: { browser.select($0) }
+            get: { browser.selectedEntryID },
+            set: { browser.selectEntry($0) }
         )
     }
 

@@ -1,4 +1,5 @@
 import Foundation
+import HermesAPI
 import HermesStore
 
 #if !os(Linux)
@@ -31,6 +32,8 @@ public final class ConversationBrowser {
     public private(set) var summaries: [ConversationSummary] = []
     public private(set) var selectedID: UUID?
     public private(set) var session: ChatSession?
+    /// The remote session shown in the detail pane, or `nil` when a local conversation is open.
+    public private(set) var openedRemote: RemoteTranscript?
     /// Sessions stored on the Hermes instance, or `nil` when no instance is configured.
     public let remoteSessions: RemoteSessionList?
 
@@ -74,7 +77,11 @@ public final class ConversationBrowser {
     }
 
     /// Opens a conversation. Selecting the open one again keeps its session, including a reply in progress.
+    /// Opening a local conversation closes the remote session shown in the detail pane.
     public func select(_ id: UUID?) {
+        if id != nil {
+            openedRemote = nil
+        }
         guard id != selectedID else { return }
         guard let id, (try? store.conversation(id: id)) != nil else {
             selectedID = nil
@@ -83,6 +90,42 @@ public final class ConversationBrowser {
         }
         selectedID = id
         session = ChatSession(service: service, model: model, store: store, conversationID: id)
+    }
+
+    /// Opens a session stored on the Hermes instance in the detail pane, in place of the local conversation.
+    /// Does nothing when no instance is configured. A reply still running in a local conversation keeps running.
+    public func openRemote(_ session: RemoteSession) {
+        guard let remoteSessions else { return }
+        selectedID = nil
+        self.session = nil
+        // Selecting the open one again keeps its transcript, including a reply in progress.
+        guard openedRemote?.sessionID != session.id else { return }
+        openedRemote = remoteSessions.transcript(for: session)
+    }
+
+    /// The sidebar row currently open, as a `SidebarEntry.id`: the remote session if one is open,
+    /// else the local conversation. A single selection drives navigation for both kinds of row.
+    public var selectedEntryID: String? {
+        if let openedRemote {
+            return SidebarEntry.remoteID(openedRemote.sessionID)
+        }
+        return selectedID.map(SidebarEntry.localID)
+    }
+
+    /// Opens the sidebar row with this `SidebarEntry.id`, local or remote. `nil` closes what is open,
+    /// as when the navigation stack goes back to the list. An unknown id is ignored.
+    public func selectEntry(_ entryID: String?) {
+        guard let entryID else {
+            openedRemote = nil
+            select(nil)
+            return
+        }
+        if let uuid = SidebarEntry.localUUID(from: entryID) {
+            select(uuid)
+        } else if let remoteID = SidebarEntry.remoteSessionID(from: entryID),
+                  let remote = remoteSessions?.sessions.first(where: { $0.id == remoteID }) {
+            openRemote(remote)
+        }
     }
 
     /// Deletes a conversation. If it was open, the most recent remaining one opens; a new one is created if none is left.

@@ -125,7 +125,7 @@ private extension ChatView {
     }
 }
 
-private struct MessageRow: View {
+struct MessageRow: View {
     let message: ChatMessage
 
     var body: some View {

@@ -18,7 +18,9 @@ struct ConversationsView: View {
                     }
                 }
         } detail: {
-            if let session = browser.session {
+            if let remote = browser.openedRemote {
+                RemoteChatView(transcript: remote)
+            } else if let session = browser.session {
                 ChatView(session: session)
                     .navigationTitle(currentTitle)
                     .inlineNavigationTitle()

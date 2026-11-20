@@ -201,6 +201,45 @@ public struct HermesClient: Sendable {
         }
     }
 
+    /// Fetches one page of a session's messages, oldest first, from `GET {baseURL}/api/sessions/{id}/messages`.
+    ///
+    /// `limit` is clamped to 1...500, the maximum the instance accepts; `offset` to 0 or more. `hasMore` is
+    /// true when the page was full. Failures are thrown, as for `listSessions(limit:offset:)`.
+    public func listSessionMessages(sessionID: String, limit: Int = 200, offset: Int = 0) async throws -> SessionMessagesPage {
+        do {
+            // The id goes into the path as is: it must be a single segment.
+            guard !sessionID.isEmpty, !sessionID.contains("/") else {
+                throw HermesAPIError.invalidResponse
+            }
+            let pageLimit = min(max(limit, 1), 500)
+            let query = [
+                URLQueryItem(name: "limit", value: String(pageLimit)),
+                URLQueryItem(name: "offset", value: String(max(offset, 0))),
+                URLQueryItem(name: "order", value: "oldest"),
+            ]
+            let request = makeRequest(
+                method: "GET",
+                path: HermesAPIPaths.sessionMessages(sessionID),
+                accept: "application/json",
+                query: query
+            )
+            let (data, response) = try await session.data(for: request)
+            try Self.validate(response, requestURL: request.url)
+            let body = try JSONDecoder().decode(SessionMessagesBody.self, from: data)
+            return SessionMessagesPage(
+                sessionID: sessionID,
+                messages: body.data,
+                hasMore: body.returned == pageLimit
+            )
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as URLError where error.code == .cancelled {
+            throw CancellationError()
+        } catch {
+            throw HermesAPIError.from(error)
+        }
+    }
+
     /// Builds `POST {baseURL}/v1/chat/completions`. Internal for tests.
     func makeRequest(model: String, messages: [ChatMessage], stream: Bool) throws -> URLRequest {
         var request = makeRequest(

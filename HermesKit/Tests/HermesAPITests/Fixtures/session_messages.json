@@ -1,0 +1,50 @@
+{
+  "object": "list",
+  "session_id": "20261120_093000_a1b2c3",
+  "data": [
+    {
+      "id": 1,
+      "session_id": "20261120_093000_a1b2c3",
+      "role": "user",
+      "content": "Can you draft the release notes?",
+      "timestamp": 1795157400.0,
+      "token_count": 9,
+      "finish_reason": null,
+      "display_kind": "visible"
+    },
+    {
+      "id": 2,
+      "session_id": "20261120_093000_a1b2c3",
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [{"id": "call_1", "type": "function", "function": {"name": "search", "arguments": "{}"}}],
+      "timestamp": 1795157410.0,
+      "display_kind": "visible"
+    },
+    {
+      "id": 3,
+      "session_id": "20261120_093000_a1b2c3",
+      "role": "tool",
+      "content": "{\"hits\": 3}",
+      "tool_call_id": "call_1",
+      "tool_name": "search",
+      "timestamp": 1795157412.0
+    },
+    {
+      "id": 4,
+      "session_id": "20261120_093000_a1b2c3",
+      "role": "assistant",
+      "content": "Here is a draft.",
+      "timestamp": 1795157420.5,
+      "finish_reason": "stop",
+      "reasoning": "private reasoning",
+      "display_kind": "visible"
+    }
+  ],
+  "pagination": {
+    "limit": 200,
+    "offset": 0,
+    "order": "oldest",
+    "returned": 4
+  }
+}
