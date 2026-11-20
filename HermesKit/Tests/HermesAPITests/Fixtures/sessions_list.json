@@ -1,0 +1,39 @@
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "20261120_093000_a1b2c3",
+      "source": "api_server",
+      "user_id": null,
+      "model": "hermes-test-model",
+      "title": "Release notes draft",
+      "started_at": 1795157400.0,
+      "ended_at": null,
+      "end_reason": null,
+      "message_count": 4,
+      "tool_call_count": 0,
+      "last_active": 1795161000.5,
+      "preview": "Can you draft the release notes?",
+      "pinned": 1,
+      "archived": 0,
+      "hidden": 0,
+      "has_system_prompt": false,
+      "has_model_config": false,
+      "is_internal_child": false
+    },
+    {
+      "id": "20261119_180000_d4e5f6",
+      "source": "api_server",
+      "title": null,
+      "started_at": 1795070400.0,
+      "message_count": 0,
+      "last_active": null,
+      "preview": null,
+      "pinned": 0,
+      "archived": 1
+    }
+  ],
+  "limit": 50,
+  "offset": 0,
+  "has_more": true
+}

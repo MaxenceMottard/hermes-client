@@ -12,4 +12,8 @@ public enum HermesAPIPaths {
     /// needs-verification: the Hermes gateway source registers `GET /v1/models` with the same Bearer auth.
     /// The real instance has not been checked yet.
     public static let models = "/v1/models"
+
+    /// Session list used by the conversation list, `GET /api/sessions?limit&offset`.
+    /// Read from the Hermes gateway source (`api_server.py`); the real instance has not been checked yet.
+    public static let sessions = "/api/sessions"
 }

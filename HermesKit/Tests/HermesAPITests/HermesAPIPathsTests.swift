@@ -13,4 +13,9 @@ struct HermesAPIPathsTests {
     func modelsPath() {
         #expect(HermesAPIPaths.models == "/v1/models")
     }
+
+    @Test("sessions path is /api/sessions (read from the gateway source)")
+    func sessionsPath() {
+        #expect(HermesAPIPaths.sessions == "/api/sessions")
+    }
 }
