@@ -14,6 +14,8 @@ struct MockReply: Sendable {
     /// `false`: the response stays open (useful to test cancellation).
     var finish = true
     var failure: URLError?
+    /// The final URL of the response, when it differs from the request URL (for example after a redirect).
+    var responseURL: URL?
 }
 
 /// Intercepts the requests of the test session. Global state: the suite is `.serialized`.
@@ -44,7 +46,7 @@ final class MockURLProtocol: URLProtocol {
         }
         guard let url = request.url,
             let response = HTTPURLResponse(
-                url: url, statusCode: reply.status, httpVersion: "HTTP/1.1", headerFields: nil)
+                url: reply.responseURL ?? url, statusCode: reply.status, httpVersion: "HTTP/1.1", headerFields: nil)
         else {
             client?.urlProtocol(self, didFailWithError: URLError(.badURL))
             return
@@ -266,6 +268,116 @@ struct HermesClientStreamTests {
         MockURLProtocol.responder = { _ in MockReply(failure: URLError(.timedOut)) }
         await #expect(throws: HermesAPIError.timeout) {
             _ = try await makeClient().chat(model: "m", messages: messages)
+        }
+    }
+
+    @Test("the health check is an authenticated GET to /health, without a body")
+    func healthRequestShape() async throws {
+        MockURLProtocol.responder = { _ in MockReply(chunks: [Data(#"{"status":"ok"}"#.utf8)]) }
+
+        try await makeClient().healthCheck()
+
+        let request = try #require(MockURLProtocol.requests.first)
+        #expect(request.httpMethod == "GET")
+        #expect(request.url?.absoluteString == "https://hermes.example.test/health")
+        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer test-key-123")
+        #expect(request.value(forHTTPHeaderField: "Accept") == "application/json")
+        #expect(request.value(forHTTPHeaderField: "Content-Type") == nil)
+        #expect(MockURLProtocol.bodies.first?.isEmpty == true)
+    }
+
+    @Test("a JSON object body with a 200 status is a successful health check")
+    func healthSuccess() async throws {
+        MockURLProtocol.responder = { _ in MockReply(chunks: [Data(#"{"status":"ok"}"#.utf8)]) }
+        try await makeClient().healthCheck()
+    }
+
+    @Test("a base URL with a trailing slash does not produce a double slash in the health check")
+    func healthTrailingSlash() async throws {
+        MockURLProtocol.responder = { _ in MockReply(chunks: [Data(#"{"status":"ok"}"#.utf8)]) }
+        let base = URL(string: "https://hermes.example.test/") ?? URL(filePath: "/")
+        try await makeClient(baseURL: base).healthCheck()
+        #expect(MockURLProtocol.requests.first?.url?.absoluteString == "https://hermes.example.test/health")
+    }
+
+    @Test("a non-JSON body (for example an HTML login page) maps to invalidResponse")
+    func healthHTMLBody() async throws {
+        MockURLProtocol.responder = { _ in MockReply(chunks: [Data("<html>Log in</html>".utf8)]) }
+        await #expect(throws: HermesAPIError.invalidResponse) {
+            try await makeClient().healthCheck()
+        }
+    }
+
+    @Test("a JSON body that is not an object maps to invalidResponse")
+    func healthNonObjectBody() async throws {
+        MockURLProtocol.responder = { _ in MockReply(chunks: [Data("[1,2]".utf8)]) }
+        await #expect(throws: HermesAPIError.invalidResponse) {
+            try await makeClient().healthCheck()
+        }
+    }
+
+    @Test("an empty 200 body maps to invalidResponse")
+    func healthEmptyBody() async throws {
+        MockURLProtocol.responder = { _ in MockReply(chunks: []) }
+        await #expect(throws: HermesAPIError.invalidResponse) {
+            try await makeClient().healthCheck()
+        }
+    }
+
+    @Test("a response served from another URL (access gate redirect) maps to invalidResponse")
+    func healthRedirectedResponse() async throws {
+        let login = URL(string: "https://hermes.example.test/login") ?? URL(filePath: "/")
+        MockURLProtocol.responder = { _ in
+            MockReply(chunks: [Data(#"{"status":"ok"}"#.utf8)], responseURL: login)
+        }
+        await #expect(throws: HermesAPIError.invalidResponse) {
+            try await makeClient().healthCheck()
+        }
+    }
+
+    @Test("a chat response redirected to another URL maps to invalidResponse, never a success")
+    func chatRedirectedResponse() async throws {
+        let login = URL(string: "https://hermes.example.test/login") ?? URL(filePath: "/")
+        let json = Data(#"{"model":"m","choices":[{"index":0,"message":{"role":"assistant","content":"hi"},"finish_reason":"stop"}]}"#.utf8)
+        MockURLProtocol.responder = { _ in MockReply(chunks: [json], responseURL: login) }
+        await #expect(throws: HermesAPIError.invalidResponse) {
+            _ = try await makeClient().chat(model: "m", messages: messages)
+        }
+    }
+
+    @Test("a 302 status (redirect not followed) maps to http(status: 302)")
+    func healthRedirectStatus() async throws {
+        MockURLProtocol.responder = { _ in MockReply(status: 302) }
+        await #expect(throws: HermesAPIError.http(status: 302)) {
+            try await makeClient().healthCheck()
+        }
+    }
+
+    @Test("health: 401 maps to unauthorized, 404 to notFound, 500 to http(status:)")
+    func healthStatusErrors() async throws {
+        MockURLProtocol.responder = { _ in MockReply(status: 401) }
+        await #expect(throws: HermesAPIError.unauthorized) {
+            try await makeClient().healthCheck()
+        }
+        MockURLProtocol.responder = { _ in MockReply(status: 404) }
+        await #expect(throws: HermesAPIError.notFound) {
+            try await makeClient().healthCheck()
+        }
+        MockURLProtocol.responder = { _ in MockReply(status: 500) }
+        await #expect(throws: HermesAPIError.http(status: 500)) {
+            try await makeClient().healthCheck()
+        }
+    }
+
+    @Test("health: URLError.timedOut maps to timeout, and a connection failure to network")
+    func healthTransportErrors() async throws {
+        MockURLProtocol.responder = { _ in MockReply(failure: URLError(.timedOut)) }
+        await #expect(throws: HermesAPIError.timeout) {
+            try await makeClient().healthCheck()
+        }
+        MockURLProtocol.responder = { _ in MockReply(failure: URLError(.cannotConnectToHost)) }
+        await #expect(throws: HermesAPIError.network) {
+            try await makeClient().healthCheck()
         }
     }
 }
