@@ -3,95 +3,63 @@ import HermesChat
 import PhotosUI
 import SwiftUI
 
-/// Conversation screen: message list, composer, and Send / Stop.
+/// Conversation screen: the message list, with the floating composer over its bottom.
 struct ChatView: View {
     let session: ChatSession
     @State private var draft = ""
+    @State private var isPickingPhotos = false
     @State private var pickerItems: [PhotosPickerItem] = []
     @State private var pendingImages: [ImageAttachment] = []
 
     var body: some View {
-        VStack(spacing: 0) {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 12) {
-                    ForEach(Array(session.messages.enumerated()), id: \.offset) { _, message in
-                        MessageRow(message: message)
-                    }
-                }
-                .padding()
-            }
-
-            if session.phase == .sending {
-                ProgressView()
-                    .padding(.bottom, 4)
-            }
-
-            if let message = failureMessage {
-                VStack(spacing: 6) {
-                    Text(message)
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                        .multilineTextAlignment(.center)
-                    if session.canRetry {
-                        Button("Retry") {
-                            Task { await session.retry() }
-                        }
-                    }
-                }
-                .padding(.horizontal)
-            }
-
-            if !pendingImages.isEmpty {
-                ScrollView(.horizontal) {
-                    HStack(spacing: 10) {
-                        ForEach(Array(pendingImages.enumerated()), id: \.offset) { index, image in
-                            AttachmentThumbnail(data: image.data) {
-                                pendingImages.remove(at: index)
-                            }
-                        }
-                    }
-                    .padding(.horizontal)
-                    .padding(.top, 8)
-                }
-            }
-
-            HStack(alignment: .bottom, spacing: 8) {
-                PhotosPicker(
-                    selection: $pickerItems,
-                    maxSelectionCount: max(1, ChatSession.maxImagesPerMessage - pendingImages.count),
-                    matching: .images
-                ) {
-                    Label("Attach image", systemImage: "photo")
-                }
-                .labelStyle(.iconOnly)
-                .font(.title2)
-                .disabled(session.isBusy || pendingImages.count >= ChatSession.maxImagesPerMessage)
-
-                TextField("Message", text: $draft, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
-                    .lineLimit(1 ... 5)
-
-                if session.isBusy {
-                    Button("Stop", systemImage: "stop.circle.fill") {
-                        session.stop()
-                    }
-                    .labelStyle(.iconOnly)
-                    .font(.title2)
-                } else {
-                    Button("Send", systemImage: "arrow.up.circle.fill") {
-                        let text = draft
-                        let images = pendingImages
-                        draft = ""
-                        pendingImages = []
-                        Task { await session.send(text, images: images) }
-                    }
-                    .labelStyle(.iconOnly)
-                    .font(.title2)
-                    .disabled(!canSend)
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 12) {
+                ForEach(Array(session.messages.enumerated()), id: \.offset) { _, message in
+                    MessageRow(message: message)
                 }
             }
             .padding()
         }
+        // The messages scroll beneath the composer.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 8) {
+                if session.phase == .sending {
+                    ComposerStatus {
+                        ProgressView()
+                    }
+                }
+
+                if let message = failureMessage {
+                    ComposerStatus {
+                        Text(message)
+                            .foregroundStyle(.red)
+                        if session.canRetry {
+                            Button("Retry") {
+                                Task { await session.retry() }
+                            }
+                        }
+                    }
+                }
+
+                ChatComposer(
+                    draft: $draft,
+                    pendingImages: pendingImages,
+                    onRemoveImage: { pendingImages.remove(at: $0) },
+                    onAdd: { isPickingPhotos = true },
+                    canAdd: pendingImages.count < ChatSession.maxImagesPerMessage,
+                    isBusy: session.isBusy,
+                    canSend: canSend,
+                    onSend: send,
+                    onStop: { session.stop() }
+                )
+            }
+        }
+        .photosPicker(
+            isPresented: $isPickingPhotos,
+            selection: $pickerItems,
+            maxSelectionCount: max(1, ChatSession.maxImagesPerMessage - pendingImages.count),
+            matching: .images
+        )
         .onChange(of: pickerItems) { _, items in
             Task { await loadPicked(items) }
         }
@@ -101,6 +69,14 @@ struct ChatView: View {
 private extension ChatView {
     var canSend: Bool {
         !pendingImages.isEmpty || !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    func send() {
+        let text = draft
+        let images = pendingImages
+        draft = ""
+        pendingImages = []
+        Task { await session.send(text, images: images) }
     }
 
     /// Converts the picked photos and adds them to the composer, up to the per-message limit.

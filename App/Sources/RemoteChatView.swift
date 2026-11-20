@@ -58,51 +58,37 @@ struct RemoteChatView: View {
                 }
             }
 
-            if transcript.isSending {
-                ProgressView()
-                    .padding(.bottom, 4)
-            }
-
-            // A session created elsewhere (web dashboard, TUI) is forked on the first message.
-            if !transcript.acceptsMessages {
-                Text("Started outside the app. Your next message continues it as a new conversation.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal)
-            }
-
-            if let error = transcript.sendError {
-                Text(error)
-                    .font(.footnote)
-                    .foregroundStyle(.red)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal)
-            }
-
-            HStack(alignment: .bottom, spacing: 8) {
-                TextField("Message", text: $draft, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
-                    .lineLimit(1 ... 5)
-
-                if transcript.isSending {
-                    Button("Stop", systemImage: "stop.circle.fill") {
-                        transcript.stop()
+            // The lines scroll beneath the composer. Text only: there is no add button.
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                VStack(spacing: 8) {
+                    // A session created elsewhere (web dashboard, TUI) is forked on the first message.
+                    if !transcript.acceptsMessages {
+                        ComposerStatus {
+                            Text("Started outside the app. Your next message continues it as a new conversation.")
+                                .foregroundStyle(.secondary)
+                        }
                     }
-                    .labelStyle(.iconOnly)
-                    .font(.title2)
-                } else {
-                    Button("Send", systemImage: "arrow.up.circle.fill") {
-                        let text = draft
-                        draft = ""
-                        Task { await transcript.send(text) }
+
+                    if let error = transcript.sendError {
+                        ComposerStatus {
+                            Text(error)
+                                .foregroundStyle(.red)
+                        }
                     }
-                    .labelStyle(.iconOnly)
-                    .font(.title2)
-                    .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                    ChatComposer(
+                        draft: $draft,
+                        isBusy: transcript.isSending,
+                        canSend: !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                        onSend: {
+                            let text = draft
+                            draft = ""
+                            Task { await transcript.send(text) }
+                        },
+                        onStop: { transcript.stop() }
+                    )
                 }
             }
-            .padding()
         }
         .navigationTitle(transcript.title ?? "Untitled session")
         .inlineNavigationTitle()
