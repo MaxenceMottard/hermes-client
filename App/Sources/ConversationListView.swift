@@ -1,4 +1,6 @@
+import HermesAPI
 import HermesChat
+import HermesStore
 import SwiftUI
 
 /// Sidebar: one list of the conversations on this device and the sessions on the Hermes instance,
