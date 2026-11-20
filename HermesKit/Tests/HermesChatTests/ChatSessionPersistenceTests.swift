@@ -71,4 +71,38 @@ struct ChatSessionPersistenceTests {
         let saved = try #require(try store.conversation(id: conversation.id))
         #expect(saved.messages == [StoredMessage(role: "user", content: "Hi")])
     }
+
+    @Test("the first message gives the conversation a title, and later messages do not change it")
+    func firstMessageTitlesConversation() async throws {
+        let store = InMemoryConversationStore()
+        let conversation = try store.createConversation(title: ConversationTitle.placeholder)
+        let session = ChatSession(
+            service: FakeChatService(scripts: [.deltas(["A"]), .deltas(["B"])]),
+            model: "m",
+            store: store,
+            conversationID: conversation.id
+        )
+
+        await session.send("Plan a trip to Lisbon")
+        #expect(try store.conversation(id: conversation.id)?.title == "Plan a trip to Lisbon")
+
+        await session.send("And hotels?")
+        #expect(try store.conversation(id: conversation.id)?.title == "Plan a trip to Lisbon")
+    }
+
+    @Test("a title chosen by the user is kept after the first message")
+    func userTitleIsKept() async throws {
+        let store = InMemoryConversationStore()
+        let conversation = try store.createConversation(title: "Work")
+        let session = ChatSession(
+            service: FakeChatService(scripts: [.deltas(["A"])]),
+            model: "m",
+            store: store,
+            conversationID: conversation.id
+        )
+
+        await session.send("Quarterly report")
+
+        #expect(try store.conversation(id: conversation.id)?.title == "Work")
+    }
 }

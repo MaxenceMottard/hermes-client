@@ -78,6 +78,7 @@ public final class ChatSession {
         let content = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !content.isEmpty, !isBusy else { return }
         messages.append(ChatMessage(role: "user", content: content))
+        titleIfUntitled(from: content)
         persist()
         await runReply()
     }
@@ -136,6 +137,16 @@ public final class ChatSession {
         if messages.indices.contains(index), messages[index].content.isEmpty {
             messages.remove(at: index)
         }
+    }
+
+    /// Gives the conversation a title from its first message, unless the user already named it.
+    private func titleIfUntitled(from content: String) {
+        guard let store, let conversationID,
+            messages.filter({ $0.role == "user" }).count == 1,
+            let saved = try? store.conversation(id: conversationID),
+            saved.title == ConversationTitle.placeholder
+        else { return }
+        try? store.rename(conversation: conversationID, to: ConversationTitle.derive(from: content))
     }
 
     /// Saves the messages to the store. Empty assistant placeholders are not saved.
