@@ -36,6 +36,32 @@ public enum SidebarEntry: Identifiable, Equatable, Sendable {
         return id.isEmpty ? nil : id
     }
 
+    /// What a row stands for. It picks the icon of the row.
+    public enum Kind: Sendable, Equatable {
+        /// A conversation with the agent.
+        case chat
+        /// A session run by a scheduled (cron) job of the instance.
+        case scheduled
+    }
+
+    public var kind: Kind {
+        switch self {
+        case .local: .chat
+        case .remote(let session): session.source == RemoteSession.cronSource ? .scheduled : .chat
+        }
+    }
+
+    /// The title shown on the row. A remote session without a title gets `untitledSession`.
+    public var title: String {
+        switch self {
+        case .local(let summary): summary.title
+        case .remote(let session): session.title ?? Self.untitledSession
+        }
+    }
+
+    /// Title of a remote session the instance has not named.
+    public static let untitledSession = "Untitled session"
+
     /// Last time the user interacted with the entry: the last update of a local conversation, or the
     /// last activity of a remote session (its start time when that is missing).
     public var lastInteraction: Date? {
