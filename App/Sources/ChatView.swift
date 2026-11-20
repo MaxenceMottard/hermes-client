@@ -3,9 +3,11 @@ import HermesChat
 import SwiftUI
 
 /// Conversation screen: message list, composer, and Send / Stop.
+/// The keyboard shortcuts (⌘↩, ⌘.) are in the menu bar, see `ChatMenuCommands`.
 struct ChatView: View {
     let session: ChatSession
-    @State private var draft = ""
+    @Binding var draft: String
+    let onCommand: (ChatCommand) -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -45,23 +47,22 @@ struct ChatView: View {
 
                 if session.isBusy {
                     Button("Stop", systemImage: "stop.circle.fill") {
-                        session.stop()
+                        onCommand(.stop)
                     }
                     .labelStyle(.iconOnly)
                     .font(.title2)
                 } else {
                     Button("Send", systemImage: "arrow.up.circle.fill") {
-                        let text = draft
-                        draft = ""
-                        Task { await session.send(text) }
+                        onCommand(.send)
                     }
                     .labelStyle(.iconOnly)
                     .font(.title2)
-                    .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(!ChatCommand.send.isEnabled(isBusy: session.isBusy, draft: draft))
                 }
             }
             .padding()
         }
+        .sendOnCommandReturn { onCommand(.send) }
     }
 }
 
