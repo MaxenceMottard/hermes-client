@@ -59,7 +59,7 @@ struct ChatView: View {
                 PhotosPicker(
                     selection: $pickerItems,
                     maxSelectionCount: max(1, ChatSession.maxImagesPerMessage - pendingImages.count),
-                    matching: .images
+                    matching: .any(of: [.images, .videos])
                 ) {
                     Label("Attach image", systemImage: "photo")
                 }
@@ -103,12 +103,12 @@ private extension ChatView {
         !pendingImages.isEmpty || !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    /// Converts the picked photos and adds them to the composer, up to the per-message limit.
+    /// Converts the picked items and adds them to the composer, up to the per-message limit.
+    /// A video contributes evenly spaced frames instead of the video itself: the instance only accepts images.
     func loadPicked(_ items: [PhotosPickerItem]) async {
         for item in items where pendingImages.count < ChatSession.maxImagesPerMessage {
-            if let attachment = await ImageAttachmentLoader.attachment(from: item) {
-                pendingImages.append(attachment)
-            }
+            let room = ChatSession.maxImagesPerMessage - pendingImages.count
+            pendingImages += await ImageAttachmentLoader.attachments(from: item, maxCount: room)
         }
         pickerItems = []
     }
