@@ -380,4 +380,78 @@ struct HermesClientStreamTests {
             try await makeClient().healthCheck()
         }
     }
+
+    @Test("listModels: a 200 with data[].id returns the IDs in order")
+    func listModelsSuccess() async throws {
+        let json = Data(#"{"object":"list","data":[{"id":"hermes-agent","object":"model"},{"id":"fast","object":"model"}]}"#.utf8)
+        MockURLProtocol.responder = { _ in MockReply(chunks: [json]) }
+
+        let result = try await makeClient().listModels()
+
+        #expect(result == .models(["hermes-agent", "fast"]))
+        let request = try #require(MockURLProtocol.requests.first)
+        #expect(request.httpMethod == "GET")
+        #expect(request.url?.absoluteString == "https://hermes.example.test/v1/models")
+        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer test-key-123")
+        #expect(MockURLProtocol.bodies.first?.isEmpty == true)
+    }
+
+    @Test("listModels: a 404 returns the fallback with notFound")
+    func listModelsNotFound() async throws {
+        MockURLProtocol.responder = { _ in MockReply(status: 404) }
+        let result = try await makeClient().listModels()
+        #expect(result == .fallback(.notFound))
+    }
+
+    @Test("listModels: a network failure returns the fallback with network")
+    func listModelsNetwork() async throws {
+        MockURLProtocol.responder = { _ in MockReply(failure: URLError(.cannotConnectToHost)) }
+        let result = try await makeClient().listModels()
+        #expect(result == .fallback(.network))
+    }
+
+    @Test("listModels: a timeout returns the fallback with timeout")
+    func listModelsTimeout() async throws {
+        MockURLProtocol.responder = { _ in MockReply(failure: URLError(.timedOut)) }
+        let result = try await makeClient().listModels()
+        #expect(result == .fallback(.timeout))
+    }
+
+    @Test("listModels: a 401 returns the fallback with unauthorized")
+    func listModelsUnauthorized() async throws {
+        MockURLProtocol.responder = { _ in MockReply(status: 401) }
+        let result = try await makeClient().listModels()
+        #expect(result == .fallback(.unauthorized))
+    }
+
+    @Test("listModels: a non-JSON body (login page) returns the fallback with invalidResponse")
+    func listModelsHTMLBody() async throws {
+        MockURLProtocol.responder = { _ in MockReply(chunks: [Data("<html>Log in</html>".utf8)]) }
+        let result = try await makeClient().listModels()
+        #expect(result == .fallback(.invalidResponse))
+    }
+
+    @Test("listModels: a JSON body without data[].id returns the fallback with invalidResponse")
+    func listModelsUnexpectedJSON() async throws {
+        MockURLProtocol.responder = { _ in MockReply(chunks: [Data(#"{"models":["a"]}"#.utf8)]) }
+        let result = try await makeClient().listModels()
+        #expect(result == .fallback(.invalidResponse))
+    }
+
+    @Test("listModels: an empty data array returns the fallback with invalidResponse")
+    func listModelsEmpty() async throws {
+        MockURLProtocol.responder = { _ in MockReply(chunks: [Data(#"{"object":"list","data":[]}"#.utf8)]) }
+        let result = try await makeClient().listModels()
+        #expect(result == .fallback(.invalidResponse))
+    }
+
+    @Test("listModels: a response served from another URL returns the fallback with invalidResponse")
+    func listModelsRedirected() async throws {
+        let login = URL(string: "https://hermes.example.test/login") ?? URL(filePath: "/")
+        MockURLProtocol.responder = { _ in
+            MockReply(chunks: [Data(#"{"object":"list","data":[{"id":"a"}]}"#.utf8)], responseURL: login)
+        }
+        let result = try await makeClient().listModels()
+        #expect(result == .fallback(.invalidResponse))
+    }
 }
