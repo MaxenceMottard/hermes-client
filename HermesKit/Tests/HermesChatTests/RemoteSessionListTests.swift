@@ -146,6 +146,14 @@ struct RemoteSessionListTests {
         #expect(!list.transcript(for: RemoteSession(id: "b", source: "local")).acceptsMessages)
     }
 
+    @Test("a transcript carries the model of its session")
+    func transcriptModel() {
+        let list = RemoteSessionList(source: FakeSessionSource(pages: []))
+
+        #expect(list.transcript(for: RemoteSession(id: "a", model: "claude-opus")).model == "claude-opus")
+        #expect(list.transcript(for: RemoteSession(id: "b")).model == nil)
+    }
+
     @Test("a fork takes the row of the original session")
     func forkReplacesRow() async {
         let source = FakeSessionSource(pages: [

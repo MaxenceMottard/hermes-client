@@ -53,6 +53,8 @@ public final class RemoteTranscript: Identifiable {
     /// The session this transcript was opened on. Stays the same after a fork.
     public nonisolated let sessionID: String
     public nonisolated let title: String?
+    /// The model the session runs on, or `nil` when the instance does not say.
+    public nonisolated let model: String?
     /// The session that messages are read from and sent to: `sessionID`, or its fork once one was made.
     public private(set) var activeSessionID: String
     /// `false` while the active session refuses API messages: the next `send(_:)` forks it first.
@@ -74,9 +76,16 @@ public final class RemoteTranscript: Identifiable {
     /// The page request in flight, shared by every caller of `load()` and `loadMore()`.
     private var loadTask: Task<Void, Never>?
 
-    public init(sessionID: String, title: String?, source: any SessionListing, acceptsMessages: Bool = true) {
+    public init(
+        sessionID: String,
+        title: String?,
+        model: String? = nil,
+        source: any SessionListing,
+        acceptsMessages: Bool = true
+    ) {
         self.sessionID = sessionID
         self.title = title
+        self.model = model
         self.source = source
         self.activeSessionID = sessionID
         self.acceptsMessages = acceptsMessages

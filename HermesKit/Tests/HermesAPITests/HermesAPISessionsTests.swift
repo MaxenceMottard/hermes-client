@@ -165,6 +165,7 @@ struct HermesAPISessionsTests {
         #expect(first.pinned)
         #expect(!first.archived)
         #expect(first.source == "api_server")
+        #expect(first.model == "hermes-test-model")
         #expect(first.acceptsAPIMessages)
 
         let second = page.sessions[1]
@@ -175,6 +176,7 @@ struct HermesAPISessionsTests {
         #expect(!second.pinned)
         #expect(second.archived)
         #expect(second.source == "local")
+        #expect(second.model == nil)
         #expect(!second.acceptsAPIMessages)
     }
 
