@@ -91,7 +91,7 @@ struct ConversationBrowserExportTests {
         let store = InMemoryConversationStore()
         let saved = try store.createConversation(title: "Trip")
         try store.replaceMessages([StoredMessage(role: "user", content: "Hi")], inConversation: saved.id)
-        let browser = ConversationBrowser(store: store, service: FakeChatService(scripts: []), model: "m")
+        let browser = ConversationBrowser(store: store, remoteSessions: RemoteSessionList(source: FakeInstance()))
 
         let export = browser.export(saved.id)
 
@@ -102,7 +102,7 @@ struct ConversationBrowserExportTests {
     @Test("an unknown conversation exports nothing")
     func unknownConversation() {
         let browser = ConversationBrowser(
-            store: InMemoryConversationStore(), service: FakeChatService(scripts: []), model: "m")
+            store: InMemoryConversationStore(), remoteSessions: RemoteSessionList(source: FakeInstance()))
 
         #expect(browser.export(UUID()) == nil)
     }
