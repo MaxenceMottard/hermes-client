@@ -4,8 +4,8 @@ import HermesStore
 import SwiftUI
 
 /// Sidebar: one list of the conversations on this device and the sessions on the Hermes instance,
-/// most recently used first. Local conversations open and can be renamed or deleted. A remote session
-/// opens read-only in the detail pane.
+/// most recently used first. Local conversations show their model, open, and can be renamed or deleted.
+/// A remote session opens read-only in the detail pane.
 struct ConversationListView: View {
     let browser: ConversationBrowser
 
@@ -57,9 +57,16 @@ struct ConversationListView: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(summary.title)
                 .lineLimit(1)
-            Text(summary.updatedAt, style: .relative)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            HStack(spacing: 4) {
+                if let model = summary.model {
+                    Text(model)
+                        .lineLimit(1)
+                    Text("·")
+                }
+                Text(summary.updatedAt, style: .relative)
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
         }
         .tag(SidebarEntry.localID(summary.id))
         .contextMenu {
