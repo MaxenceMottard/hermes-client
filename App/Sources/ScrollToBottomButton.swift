@@ -31,6 +31,9 @@ struct ScrollBottomMarker: View {
     /// Top of the composer, in global coordinates.
     let visibleEnd: CGFloat
     @Binding var isAtBottom: Bool
+    /// Called when the composer rises (the keyboard opens, the draft grows) while the reader was at the
+    /// bottom: the screen should scroll so the last message stays just above the composer.
+    var onComposerRise: () -> Void = {}
 
     /// Where the marker sits on screen, in global coordinates.
     @State private var contentEnd: CGFloat = 0
@@ -45,8 +48,13 @@ struct ScrollBottomMarker: View {
                 update()
             }
             // The composer moves too: with the keyboard, or when it grows with the draft or images.
-            .onChange(of: visibleEnd) {
-                update()
+            .onChange(of: visibleEnd) { oldEnd, newEnd in
+                if isAtBottom, newEnd < oldEnd {
+                    // Stay at the bottom: the scroll brings the marker back above the composer.
+                    onComposerRise()
+                } else {
+                    update()
+                }
             }
     }
 

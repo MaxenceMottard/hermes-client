@@ -29,7 +29,11 @@ struct ChatView: View {
             }
             .padding()
 
-            ScrollBottomMarker(visibleEnd: composerTop, isAtBottom: $isAtBottom)
+            ScrollBottomMarker(visibleEnd: composerTop, isAtBottom: $isAtBottom) {
+                withAnimation(.smooth(duration: 0.25)) {
+                    scrollPosition.scrollTo(edge: .bottom)
+                }
+            }
         }
         // Before the inset, so a tap on the composer does not hide the keyboard.
         .dismissesKeyboard($isComposerFocused)
