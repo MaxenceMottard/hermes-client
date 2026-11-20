@@ -31,16 +31,24 @@ public final class ConversationBrowser {
     public private(set) var summaries: [ConversationSummary] = []
     public private(set) var selectedID: UUID?
     public private(set) var session: ChatSession?
+    /// Sessions stored on the Hermes instance, or `nil` when no instance is configured.
+    public let remoteSessions: RemoteSessionList?
 
     private let store: any ConversationStore
     private let service: any ChatService
     private let model: String
 
     /// Loads the conversations and opens the most recent one. Creates a conversation if there is none.
-    public init(store: any ConversationStore, service: any ChatService, model: String) {
+    public init(
+        store: any ConversationStore,
+        service: any ChatService,
+        model: String,
+        remoteSessions: RemoteSessionList? = nil
+    ) {
         self.store = store
         self.service = service
         self.model = model
+        self.remoteSessions = remoteSessions
         refresh()
         if summaries.isEmpty {
             _ = try? createConversation()

@@ -61,6 +61,11 @@ final class AppState {
             return
         }
         let client = HermesClient(configuration: HermesClientConfiguration(baseURL: baseURL, apiKey: key))
-        browser = ConversationBrowser(store: store, service: client, model: settings.model)
+        browser = ConversationBrowser(
+            store: store,
+            service: client,
+            model: settings.model,
+            remoteSessions: RemoteSessionList(source: client)
+        )
     }
 }
