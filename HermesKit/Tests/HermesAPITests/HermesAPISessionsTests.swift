@@ -164,6 +164,8 @@ struct HermesAPISessionsTests {
         #expect(first.lastActive == Date(timeIntervalSince1970: 1_795_161_000.5))
         #expect(first.pinned)
         #expect(!first.archived)
+        #expect(first.source == "api_server")
+        #expect(first.acceptsAPIMessages)
 
         let second = page.sessions[1]
         #expect(second.id == "20261119_180000_d4e5f6")
@@ -172,6 +174,52 @@ struct HermesAPISessionsTests {
         #expect(second.lastActive == nil)
         #expect(!second.pinned)
         #expect(second.archived)
+        #expect(second.source == "local")
+        #expect(!second.acceptsAPIMessages)
+    }
+
+    @Test("a session without a source is assumed to accept API messages")
+    func absentSourceAcceptsMessages() {
+        #expect(RemoteSession(id: "a").acceptsAPIMessages)
+        #expect(!RemoteSession(id: "a", source: "tui").acceptsAPIMessages)
+    }
+
+    @Test("a fork is an authenticated POST to /api/sessions/{id}/fork and returns the new session")
+    func forkRequest() async throws {
+        SessionsURLProtocol.responder = { _ in
+            SessionsReply(status: 201, body: Data(#"""
+            {"object":"hermes.session","session":{"id":"api_1795187600_ab12cd34","source":"api_server",
+            "title":"Dashboard chat #2","parent_session_id":"local-1","pinned":false,"archived":false}}
+            """#.utf8))
+        }
+
+        let fork = try await makeClient().forkSession(sessionID: "local-1")
+
+        let request = try #require(SessionsURLProtocol.requests.first)
+        #expect(request.httpMethod == "POST")
+        #expect(request.url?.absoluteString == "https://hermes.example.test/api/sessions/local-1/fork")
+        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer test-key-123")
+        #expect(request.value(forHTTPHeaderField: "Content-Type") == "application/json")
+        #expect(SessionsURLProtocol.bodies.first == Data("{}".utf8))
+        #expect(fork == RemoteSession(id: "api_1795187600_ab12cd34", title: "Dashboard chat #2", source: "api_server"))
+        #expect(fork.acceptsAPIMessages)
+    }
+
+    @Test("a rejected fork maps to its status error")
+    func forkStatusError() async throws {
+        SessionsURLProtocol.responder = { _ in SessionsReply(status: 404) }
+
+        await #expect(throws: HermesAPIError.notFound) {
+            _ = try await makeClient().forkSession(sessionID: "gone")
+        }
+    }
+
+    @Test("a fork of a session id with a slash is rejected before any request is sent")
+    func forkRejectsSlash() async throws {
+        await #expect(throws: HermesAPIError.invalidResponse) {
+            _ = try await makeClient().forkSession(sessionID: "a/b")
+        }
+        #expect(SessionsURLProtocol.requests.isEmpty)
     }
 
     @Test("an empty page is valid and has no more pages")

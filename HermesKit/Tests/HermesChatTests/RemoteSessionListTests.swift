@@ -26,6 +26,10 @@ actor FakeSessionSource: SessionListing {
     func streamSessionChat(sessionID: String, message: String) -> AsyncThrowingStream<SessionChatEvent, any Error> {
         AsyncThrowingStream { $0.finish() }
     }
+
+    func forkSession(sessionID: String) async throws -> RemoteSession {
+        throw HermesAPIError.notFound
+    }
 }
 
 @MainActor
@@ -132,5 +136,36 @@ struct RemoteSessionListTests {
         #expect(list.state == .failed(.network))
         #expect(list.sessions.map(\.id) == ["a"])
         #expect(list.hasMore)
+    }
+
+    @Test("a transcript accepts messages only for a session the API may write to")
+    func transcriptAcceptsMessages() {
+        let list = RemoteSessionList(source: FakeSessionSource(pages: []))
+
+        #expect(list.transcript(for: RemoteSession(id: "a", source: "api_server")).acceptsMessages)
+        #expect(!list.transcript(for: RemoteSession(id: "b", source: "local")).acceptsMessages)
+    }
+
+    @Test("a fork takes the row of the original session")
+    func forkReplacesRow() async {
+        let source = FakeSessionSource(pages: [
+            .success(SessionPage(sessions: [session("a"), session("local-1"), session("c")], hasMore: false)),
+        ])
+        let list = RemoteSessionList(source: source)
+        await list.reload()
+        let transcript = list.transcript(for: RemoteSession(id: "local-1", source: "local"))
+
+        transcript.onFork?(RemoteSession(id: "api_fork", source: "api_server"))
+
+        #expect(list.sessions.map(\.id) == ["a", "api_fork", "c"])
+    }
+
+    @Test("a fork whose original is no longer listed goes to the top, once")
+    func forkInsertedAtTop() {
+        let list = RemoteSessionList(source: FakeSessionSource(pages: []))
+        list.replace("gone", with: session("api_fork"))
+        list.replace("gone", with: session("api_fork"))
+
+        #expect(list.sessions.map(\.id) == ["api_fork"])
     }
 }

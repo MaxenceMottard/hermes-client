@@ -4,15 +4,30 @@ import Testing
 
 @testable import HermesChat
 
-/// Streams a scripted reply, optionally failing, and records the messages it was sent.
+/// Streams a scripted reply, optionally failing, and records the messages it was sent, the sessions
+/// they were sent to, and the forks it was asked for.
 actor FakeChatStreamSource: SessionListing {
     private let events: [SessionChatEvent]
     private let failure: HermesAPIError?
+    private let forkResult: Result<RemoteSession, HermesAPIError>
     private(set) var sent: [String] = []
+    private(set) var sentTo: [String] = []
+    private(set) var forked: [String] = []
+    private(set) var listedFor: [String] = []
 
-    init(events: [SessionChatEvent], failure: HermesAPIError? = nil) {
+    init(
+        events: [SessionChatEvent],
+        failure: HermesAPIError? = nil,
+        forkResult: Result<RemoteSession, HermesAPIError> = .failure(.notFound)
+    ) {
         self.events = events
         self.failure = failure
+        self.forkResult = forkResult
+    }
+
+    func forkSession(sessionID: String) async throws -> RemoteSession {
+        forked.append(sessionID)
+        return try forkResult.get()
     }
 
     func listSessions(limit: Int, offset: Int) async throws -> SessionPage {
@@ -20,11 +35,13 @@ actor FakeChatStreamSource: SessionListing {
     }
 
     func listSessionMessages(sessionID: String, limit: Int, offset: Int) async throws -> SessionMessagesPage {
-        SessionMessagesPage(sessionID: sessionID, messages: [], hasMore: false)
+        listedFor.append(sessionID)
+        return SessionMessagesPage(sessionID: sessionID, messages: [], hasMore: false)
     }
 
     func streamSessionChat(sessionID: String, message: String) -> AsyncThrowingStream<SessionChatEvent, any Error> {
         sent.append(message)
+        sentTo.append(sessionID)
         let events = events
         let failure = failure
         return AsyncThrowingStream { continuation in
@@ -100,6 +117,55 @@ struct RemoteTranscriptSendTests {
 
         #expect(transcript.lines.last?.text == "Par")
         #expect(transcript.sendError == HermesAPIError.timeout.errorDescription)
+        #expect(!transcript.isSending)
+    }
+
+    @Test("a session that accepts API messages is not forked")
+    func noForkForAPISession() async {
+        let source = FakeChatStreamSource(events: [.completed("Hello")])
+        let transcript = RemoteTranscript(sessionID: "s1", title: nil, source: source)
+
+        await transcript.send("Hi")
+
+        #expect(await source.forked.isEmpty)
+        #expect(await source.sentTo == ["s1"])
+        #expect(transcript.activeSessionID == "s1")
+    }
+
+    @Test("a session created elsewhere is forked once, then messages and pages go to the fork")
+    func forksBeforeFirstMessage() async {
+        let fork = RemoteSession(id: "api_fork", title: "Dashboard chat #2", source: "api_server")
+        let source = FakeChatStreamSource(events: [.completed("Hello")], forkResult: .success(fork))
+        let transcript = RemoteTranscript(sessionID: "local-1", title: "Dashboard chat", source: source, acceptsMessages: false)
+        var reported: [RemoteSession] = []
+        transcript.onFork = { reported.append($0) }
+
+        await transcript.send("Hi")
+        await transcript.send("Again")
+        await transcript.load()
+
+        #expect(await source.forked == ["local-1"])
+        #expect(await source.sentTo == ["api_fork", "api_fork"])
+        #expect(await source.listedFor == ["api_fork"])
+        #expect(reported == [fork])
+        #expect(transcript.sessionID == "local-1")
+        #expect(transcript.activeSessionID == "api_fork")
+        #expect(transcript.acceptsMessages)
+        #expect(transcript.sendError == nil)
+    }
+
+    @Test("a failed fork sends nothing, keeps the user line and reports the error")
+    func failedFork() async {
+        let source = FakeChatStreamSource(events: [.completed("Hello")], forkResult: .failure(.http(status: 500)))
+        let transcript = RemoteTranscript(sessionID: "local-1", title: nil, source: source, acceptsMessages: false)
+
+        await transcript.send("Hi")
+
+        #expect(await source.sent.isEmpty)
+        #expect(transcript.lines.map(\.role) == ["user"])
+        #expect(transcript.activeSessionID == "local-1")
+        #expect(!transcript.acceptsMessages)
+        #expect(transcript.sendError?.contains("started outside the app") == true)
         #expect(!transcript.isSending)
     }
 }

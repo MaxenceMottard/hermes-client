@@ -22,6 +22,12 @@ public enum HermesAPIPaths {
         "\(sessions)/\(sessionID)/messages"
     }
 
+    /// Fork of one session, `POST /api/sessions/{id}/fork`. Copies the messages into a new API session
+    /// and ends the original. Read from the Hermes gateway source (`api_server.py`).
+    public static func sessionFork(_ sessionID: String) -> String {
+        "\(sessions)/\(sessionID)/fork"
+    }
+
     /// Chat stream of one session, `POST /api/sessions/{id}/chat/stream` (server-sent events).
     public static func sessionChatStream(_ sessionID: String) -> String {
         "\(sessions)/\(sessionID)/chat/stream"

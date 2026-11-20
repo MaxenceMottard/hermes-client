@@ -316,6 +316,34 @@ public struct HermesClient: Sendable {
         }
     }
 
+    /// Copies a session into a new session owned by the API, from `POST {baseURL}/api/sessions/{id}/fork`,
+    /// and returns the new session.
+    ///
+    /// The instance copies every message, gives the copy a title derived from the original, and ends
+    /// the original as `branched`. Use it to continue a session the API may not write to (see
+    /// `RemoteSession.acceptsAPIMessages`). The request is never retried automatically.
+    public func forkSession(sessionID: String) async throws -> RemoteSession {
+        do {
+            // The id goes into the path as is: it must be a single segment.
+            guard !sessionID.isEmpty, !sessionID.contains("/") else {
+                throw HermesAPIError.invalidResponse
+            }
+            var request = makeRequest(
+                method: "POST", path: HermesAPIPaths.sessionFork(sessionID), accept: "application/json"
+            )
+            request.httpBody = Data("{}".utf8)
+            let (data, response) = try await session.data(for: request)
+            try Self.validate(response, requestURL: request.url)
+            return try JSONDecoder().decode(SessionForkBody.self, from: data).session
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as URLError where error.code == .cancelled {
+            throw CancellationError()
+        } catch {
+            throw HermesAPIError.from(error)
+        }
+    }
+
     /// Builds `POST {baseURL}/v1/chat/completions`. Internal for tests.
     func makeRequest(model: String, messages: [ChatMessage], stream: Bool) throws -> URLRequest {
         var request = makeRequest(

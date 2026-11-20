@@ -26,6 +26,10 @@ actor FakeMessageSource: SessionListing {
     func streamSessionChat(sessionID: String, message: String) -> AsyncThrowingStream<SessionChatEvent, any Error> {
         AsyncThrowingStream { $0.finish() }
     }
+
+    func forkSession(sessionID: String) async throws -> RemoteSession {
+        throw HermesAPIError.notFound
+    }
 }
 
 /// Holds each message request until `release()`, then answers it, or throws `CancellationError` if the
@@ -60,6 +64,10 @@ actor GatedMessageSource: SessionListing {
 
     func streamSessionChat(sessionID: String, message: String) -> AsyncThrowingStream<SessionChatEvent, any Error> {
         AsyncThrowingStream { $0.finish() }
+    }
+
+    func forkSession(sessionID: String) async throws -> RemoteSession {
+        throw HermesAPIError.notFound
     }
 }
 

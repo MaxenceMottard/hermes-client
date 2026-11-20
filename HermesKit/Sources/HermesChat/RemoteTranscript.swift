@@ -30,6 +30,10 @@ public struct TranscriptLine: Identifiable, Equatable, Sendable {
 /// `send(_:)` posts a message to the session and shows the reply as it streams. Its lines live only in
 /// this object until the transcript is loaded again.
 ///
+/// The instance refuses API messages in a session created elsewhere (web dashboard, TUI). For such a
+/// session the first `send(_:)` forks it into an API session, which holds the same messages, and the
+/// transcript continues in the fork: `activeSessionID` changes, `sessionID` does not.
+///
 /// `@Observable` is applied on Apple platforms, see `ChatSession` for why it is left out on Linux.
 @MainActor
 #if !os(Linux)
@@ -46,8 +50,15 @@ public final class RemoteTranscript: Identifiable {
     /// Page size requested from the instance.
     public static let pageSize = 200
 
+    /// The session this transcript was opened on. Stays the same after a fork.
     public nonisolated let sessionID: String
     public nonisolated let title: String?
+    /// The session that messages are read from and sent to: `sessionID`, or its fork once one was made.
+    public private(set) var activeSessionID: String
+    /// `false` while the active session refuses API messages: the next `send(_:)` forks it first.
+    public private(set) var acceptsMessages: Bool
+    /// Called on the main actor with the new session after a fork.
+    var onFork: (@MainActor (RemoteSession) -> Void)?
     public private(set) var lines: [TranscriptLine] = []
     public private(set) var state: State = .idle
     public private(set) var hasMore = false
@@ -63,10 +74,12 @@ public final class RemoteTranscript: Identifiable {
     /// The page request in flight, shared by every caller of `load()` and `loadMore()`.
     private var loadTask: Task<Void, Never>?
 
-    public init(sessionID: String, title: String?, source: any SessionListing) {
+    public init(sessionID: String, title: String?, source: any SessionListing, acceptsMessages: Bool = true) {
         self.sessionID = sessionID
         self.title = title
         self.source = source
+        self.activeSessionID = sessionID
+        self.acceptsMessages = acceptsMessages
     }
 
     public nonisolated var id: String { sessionID }
@@ -91,7 +104,7 @@ public final class RemoteTranscript: Identifiable {
     public func load() async {
         await run { transcript in
             let page = try await transcript.source.listSessionMessages(
-                sessionID: transcript.sessionID, limit: Self.pageSize, offset: 0
+                sessionID: transcript.activeSessionID, limit: Self.pageSize, offset: 0
             )
             transcript.lines = Self.lines(from: page.messages)
             transcript.received = page.messages.count
@@ -106,7 +119,7 @@ public final class RemoteTranscript: Identifiable {
         await run { transcript in
             guard transcript.hasMore else { return }
             let page = try await transcript.source.listSessionMessages(
-                sessionID: transcript.sessionID, limit: Self.pageSize, offset: transcript.received
+                sessionID: transcript.activeSessionID, limit: Self.pageSize, offset: transcript.received
             )
             transcript.lines = Self.lines(from: page.messages) + transcript.lines
             transcript.received += page.messages.count
@@ -159,9 +172,32 @@ public final class RemoteTranscript: Identifiable {
         sendTask?.cancel()
     }
 
-    private func stream(_ message: String, replyID: String) async {
+    /// Forks the active session so that it accepts API messages. Returns `false`, with `sendError` set,
+    /// if the fork failed or was cancelled.
+    private func forkIfNeeded() async -> Bool {
+        guard !acceptsMessages else { return true }
         do {
-            for try await event in await source.streamSessionChat(sessionID: sessionID, message: message) {
+            let fork = try await source.forkSession(sessionID: activeSessionID)
+            activeSessionID = fork.id
+            acceptsMessages = true
+            onFork?(fork)
+            return true
+        } catch is CancellationError {
+            return false
+        } catch {
+            let reason = HermesAPIError.from(error).errorDescription ?? "The request failed."
+            sendError = "This conversation was started outside the app and could not be continued here. \(reason)"
+            return false
+        }
+    }
+
+    private func stream(_ message: String, replyID: String) async {
+        guard await forkIfNeeded() else {
+            lines.removeAll { $0.id == replyID }
+            return
+        }
+        do {
+            for try await event in await source.streamSessionChat(sessionID: activeSessionID, message: message) {
                 switch event {
                 case .delta(let delta):
                     setReply(id: replyID) { $0 + delta }

@@ -88,5 +88,26 @@ struct ConversationBrowserRemoteTests {
         #expect(await source.requestCount == 1)
         #expect(transcript.lines.map(\.text) == ["Hi"])
     }
+
+    @Test("after a fork the selection follows the fork and selecting it keeps the transcript")
+    func selectionFollowsFork() async throws {
+        let fork = RemoteSession(id: "api_fork", source: "api_server")
+        let source = FakeChatStreamSource(events: [.completed("Hello")], forkResult: .success(fork))
+        let browser = ConversationBrowser(
+            store: InMemoryConversationStore(),
+            service: FakeChatService(scripts: []),
+            model: "m",
+            remoteSessions: RemoteSessionList(source: source)
+        )
+        browser.openRemote(RemoteSession(id: "local-1", source: "local"))
+        let transcript = try #require(browser.openedRemote)
+
+        await transcript.send("Hi")
+        browser.selectEntry(SidebarEntry.remoteID("api_fork"))
+
+        #expect(browser.selectedEntryID == SidebarEntry.remoteID("api_fork"))
+        #expect(browser.openedRemote === transcript)
+        #expect(browser.remoteSessions?.sessions.map(\.id) == ["api_fork"])
+    }
 }
 

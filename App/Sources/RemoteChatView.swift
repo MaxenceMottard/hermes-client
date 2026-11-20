@@ -4,6 +4,7 @@ import SwiftUI
 
 /// A session stored on the Hermes instance, shown in the detail pane with the same message rows as a
 /// local conversation. Messages can be sent: the reply streams in from the instance. Text only for now.
+/// A session created outside the app is forked on the first message, see `RemoteTranscript`.
 struct RemoteChatView: View {
     let transcript: RemoteTranscript
 
@@ -60,6 +61,15 @@ struct RemoteChatView: View {
             if transcript.isSending {
                 ProgressView()
                     .padding(.bottom, 4)
+            }
+
+            // A session created elsewhere (web dashboard, TUI) is forked on the first message.
+            if !transcript.acceptsMessages {
+                Text("Started outside the app. Your next message continues it as a new conversation.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
             }
 
             if let error = transcript.sendError {

@@ -10,6 +10,7 @@ public protocol SessionListing: Sendable {
     func listSessions(limit: Int, offset: Int) async throws -> SessionPage
     func listSessionMessages(sessionID: String, limit: Int, offset: Int) async throws -> SessionMessagesPage
     func streamSessionChat(sessionID: String, message: String) async -> AsyncThrowingStream<SessionChatEvent, any Error>
+    func forkSession(sessionID: String) async throws -> RemoteSession
 }
 
 extension HermesClient: SessionListing {}
@@ -86,8 +87,28 @@ public final class RemoteSessionList {
         }
     }
 
-    /// The messages of one session, loaded on demand by the transcript view.
+    /// The messages of one session, loaded on demand by the transcript view. When the transcript moves
+    /// to a fork to accept a message, the fork takes the original's row.
     public func transcript(for session: RemoteSession) -> RemoteTranscript {
-        RemoteTranscript(sessionID: session.id, title: session.title, source: source)
+        let transcript = RemoteTranscript(
+            sessionID: session.id,
+            title: session.title,
+            source: source,
+            acceptsMessages: session.acceptsAPIMessages
+        )
+        transcript.onFork = { [weak self] fork in
+            self?.replace(session.id, with: fork)
+        }
+        return transcript
+    }
+
+    /// Puts `session` in place of the row with id `originalID`, or at the top if that row is gone.
+    func replace(_ originalID: String, with session: RemoteSession) {
+        sessions.removeAll { $0.id == session.id }
+        if let index = sessions.firstIndex(where: { $0.id == originalID }) {
+            sessions[index] = session
+        } else {
+            sessions.insert(session, at: 0)
+        }
     }
 }
