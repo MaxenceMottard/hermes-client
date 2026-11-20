@@ -22,6 +22,13 @@ struct ConversationsView: View {
                 ChatView(session: session)
                     .navigationTitle(currentTitle)
                     .inlineNavigationTitle()
+                    .toolbar {
+                        if let export = currentExport {
+                            ToolbarItem(placement: .primaryAction) {
+                                ExportLink(export: export)
+                            }
+                        }
+                    }
             }
         }
         .onChange(of: browser.session?.phase) {
@@ -31,5 +38,9 @@ struct ConversationsView: View {
 
     private var currentTitle: String {
         browser.summaries.first { $0.id == browser.selectedID }?.title ?? ConversationTitle.placeholder
+    }
+
+    private var currentExport: ConversationExport? {
+        browser.selectedID.flatMap { browser.export($0) }
     }
 }
