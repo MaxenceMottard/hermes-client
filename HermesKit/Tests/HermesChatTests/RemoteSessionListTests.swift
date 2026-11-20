@@ -41,6 +41,44 @@ struct RemoteSessionListTests {
         RemoteSession(id: id, title: id, pinned: pinned)
     }
 
+    private func dated(_ id: String, active: TimeInterval?, started: TimeInterval? = nil) -> RemoteSession {
+        RemoteSession(
+            id: id,
+            startedAt: started.map(Date.init(timeIntervalSince1970:)),
+            lastActive: active.map(Date.init(timeIntervalSince1970:))
+        )
+    }
+
+    /// A list holding `sessions`, in the order the instance returned them.
+    private func loadedList(_ sessions: [RemoteSession]) async -> RemoteSessionList {
+        let list = RemoteSessionList(source: FakeSessionSource(pages: [
+            .success(SessionPage(sessions: sessions, hasMore: false)),
+        ]))
+        await list.reload()
+        return list
+    }
+
+    @Test("recentFirst orders by last activity, then start time, undated sessions last")
+    func recentFirstOrder() async {
+        let list = await loadedList([
+            dated("undated", active: nil),
+            dated("old", active: 100),
+            dated("started", active: nil, started: 300),
+            dated("new", active: 400),
+        ])
+
+        #expect(list.recentFirst.map(\.id) == ["new", "started", "old", "undated"])
+    }
+
+    @Test("recentFirst keeps a stable order on equal dates")
+    func recentFirstStable() async {
+        let first = await loadedList([dated("b", active: 5), dated("a", active: 5)])
+        let second = await loadedList([dated("a", active: 5), dated("b", active: 5)])
+
+        #expect(first.recentFirst.map(\.id) == ["a", "b"])
+        #expect(second.recentFirst.map(\.id) == ["a", "b"])
+    }
+
     @Test("reload loads the first page at offset 0 and records hasMore")
     func reloadLoadsFirstPage() async {
         let source = FakeSessionSource(pages: [

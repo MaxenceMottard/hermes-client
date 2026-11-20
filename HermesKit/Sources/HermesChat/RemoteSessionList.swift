@@ -59,6 +59,23 @@ public final class RemoteSessionList {
         state == .loading
     }
 
+    /// The sessions, most recent activity first: the last activity of a session, or its start time when
+    /// that is missing. Sessions without any date go last. Ties are broken by id, so the order is stable.
+    public var recentFirst: [RemoteSession] {
+        sessions.sorted { lhs, rhs in
+            switch (lhs.lastActive ?? lhs.startedAt, rhs.lastActive ?? rhs.startedAt) {
+            case let (left?, right?) where left != right:
+                left > right
+            case (_?, nil):
+                true
+            case (nil, _?):
+                false
+            default:
+                lhs.id < rhs.id
+            }
+        }
+    }
+
     /// Loads the first page and replaces the list. Ignored while a request is running.
     public func reload() async {
         guard !isLoading else { return }

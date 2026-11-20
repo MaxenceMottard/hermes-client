@@ -1,6 +1,5 @@
 import Foundation
 import HermesAPI
-import HermesStore
 
 #if !os(Linux)
     import Observation
@@ -14,9 +13,7 @@ public enum ConversationTitle {
 /// The conversation list and the open conversation.
 ///
 /// Every conversation is a session stored on the Hermes instance: a new one is created there, and the
-/// instance keeps its messages, title and model. The conversations saved on this device by earlier
-/// versions of the app stay readable, and can be renamed, exported or deleted, but not continued: the
-/// instance has no copy of them.
+/// instance keeps its messages, title and model. The app keeps no copy.
 ///
 /// A session created here and left before any message is sent is deleted from the instance, so an
 /// abandoned "New conversation" does not stay in the list.
@@ -27,19 +24,12 @@ public enum ConversationTitle {
     @Observable
 #endif
 public final class ConversationBrowser {
-    /// The conversations saved on this device, most recent first.
-    public private(set) var summaries: [ConversationSummary] = []
-    /// The id of the open conversation saved on this device, or `nil`.
-    public private(set) var selectedID: UUID?
-    /// The open conversation saved on this device, read-only.
-    public private(set) var archived: StoredConversation?
     /// The open session.
     public private(set) var openedRemote: RemoteTranscript?
     public let remoteSessions: RemoteSessionList
     /// `true` while a new session is being created on the instance.
     public private(set) var isCreating = false
 
-    private let store: any ConversationStore
     private let model: String
     private let lastModel: (any LastModelStorage)?
     /// Sessions created here in which no message was sent yet.
@@ -51,23 +41,13 @@ public final class ConversationBrowser {
 
     /// `model` is the instance default, used when no model was chosen yet.
     public init(
-        store: any ConversationStore,
         remoteSessions: RemoteSessionList,
         model: String = ModelChoice.instanceDefault.model,
         lastModel: (any LastModelStorage)? = nil
     ) {
-        self.store = store
         self.remoteSessions = remoteSessions
         self.model = model
         self.lastModel = lastModel
-        refresh()
-    }
-
-    /// Reloads the list of conversations saved on this device.
-    public func refresh() {
-        if let loaded = try? store.summaries() {
-            summaries = loaded
-        }
     }
 
     /// The instance default model, the fallback of the new conversation screen.
@@ -104,15 +84,6 @@ public final class ConversationBrowser {
         return session
     }
 
-    /// Opens a conversation saved on this device, read-only, or closes the open one with `nil`.
-    public func select(_ id: UUID?) {
-        guard id != selectedID || id == nil else { return }
-        closeOpened()
-        guard let id, let conversation = try? store.conversation(id: id) else { return }
-        selectedID = id
-        archived = conversation
-    }
-
     /// Opens a session. Selecting the open one again keeps its transcript, including a reply in progress.
     /// A session left while its reply was streaming opens on the same transcript, with the reply still arriving.
     public func openRemote(_ session: RemoteSession) {
@@ -136,26 +107,21 @@ public final class ConversationBrowser {
         Task { await transcript.load() }
     }
 
-    /// The sidebar row of the open conversation.
-    public var selectedEntryID: String? {
-        if let openedRemote {
-            // The active session: after a fork the sidebar row carries the fork's id.
-            return SidebarEntry.remoteID(openedRemote.activeSessionID)
-        }
-        return selectedID.map(SidebarEntry.localID)
+    /// The id of the open session's row. After a fork the row carries the fork's id, the transcript's
+    /// active session.
+    public var selectedSessionID: String? {
+        openedRemote?.activeSessionID
     }
 
-    /// Opens the conversation of a sidebar row, or closes the open one with `nil`.
-    public func selectEntry(_ entryID: String?) {
-        guard let entryID else {
+    /// Opens the session with this id from the list, or closes the open one with `nil`. An id missing
+    /// from the list is ignored.
+    public func selectSession(_ sessionID: String?) {
+        guard let sessionID else {
             closeOpened()
             return
         }
-        if let uuid = SidebarEntry.localUUID(from: entryID) {
-            select(uuid)
-        } else if let remoteID = SidebarEntry.remoteSessionID(from: entryID),
-                  let remote = remoteSessions.sessions.first(where: { $0.id == remoteID }) {
-            openRemote(remote)
+        if let session = remoteSessions.sessions.first(where: { $0.id == sessionID }) {
+            openRemote(session)
         }
     }
 
@@ -164,8 +130,6 @@ public final class ConversationBrowser {
         await remoteSessions.reload()
         syncOpenedTitle()
     }
-
-    // MARK: Sessions on the instance
 
     /// Renames a session on the instance. A blank title is ignored.
     public func renameSession(_ sessionID: String, to title: String) async throws {
@@ -191,43 +155,12 @@ public final class ConversationBrowser {
         }
     }
 
-    // MARK: Conversations saved on this device
-
-    /// Deletes a conversation saved on this device, and closes it if it is open.
-    public func delete(_ id: UUID) throws {
-        try store.deleteConversation(id: id)
-        if id == selectedID {
-            selectedID = nil
-            archived = nil
-        }
-        refresh()
-    }
-
-    /// The Markdown export of a conversation saved on this device.
-    public func export(_ id: UUID) -> ConversationExport? {
-        guard let conversation = try? store.conversation(id: id) else { return nil }
-        return ConversationExport.make(from: conversation)
-    }
-
-    /// Renames a conversation saved on this device. A blank title is ignored.
-    public func rename(_ id: UUID, to title: String) throws {
-        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        try store.rename(conversation: id, to: trimmed)
-        refresh()
-        if id == selectedID {
-            archived = try? store.conversation(id: id)
-        }
-    }
-
     // MARK: Private
 
     /// Closes the open conversation. A session created here and left without a message is deleted. One
     /// left while a reply streams is kept; kept transcripts whose reply ended are dropped, the instance
     /// holds all of their messages.
     private func closeOpened() {
-        selectedID = nil
-        archived = nil
         defer { liveTranscripts.removeAll { !$0.isSending } }
         guard let transcript = openedRemote else { return }
         openedRemote = nil

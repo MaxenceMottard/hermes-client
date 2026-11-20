@@ -1,6 +1,5 @@
 import Foundation
 import HermesAPI
-import HermesStore
 import Testing
 
 @testable import HermesChat
@@ -19,11 +18,9 @@ func waitUntil(_ condition: @MainActor () async -> Bool) async {
 struct ConversationBrowserTests {
     private func makeBrowser(
         instance: FakeInstance = FakeInstance(),
-        store: InMemoryConversationStore = InMemoryConversationStore(),
         lastModel: InMemoryLastModelStorage? = nil
     ) -> ConversationBrowser {
         ConversationBrowser(
-            store: store,
             remoteSessions: RemoteSessionList(source: instance),
             model: "default-model",
             lastModel: lastModel
@@ -32,18 +29,14 @@ struct ConversationBrowserTests {
 
     // MARK: Start
 
-    @Test("nothing is created or opened on start, and conversations saved on this device are listed")
-    func startsClosed() throws {
-        let store = InMemoryConversationStore()
-        _ = try store.createConversation(title: "Old chat")
+    @Test("nothing is created or opened on start")
+    func startsClosed() async {
+        let instance = FakeInstance()
+        let browser = makeBrowser(instance: instance)
 
-        let browser = makeBrowser(store: store)
-
-        #expect(browser.summaries.map(\.title) == ["Old chat"])
         #expect(browser.openedRemote == nil)
-        #expect(browser.archived == nil)
-        #expect(browser.selectedEntryID == nil)
-        #expect(try store.summaries().count == 1)
+        #expect(browser.selectedSessionID == nil)
+        #expect(await instance.created.isEmpty)
     }
 
     // MARK: New conversation
@@ -61,7 +54,7 @@ struct ConversationBrowserTests {
         #expect(browser.openedRemote?.model == ModelChoice(model: "opus", provider: "anthropic"))
         #expect(browser.openedRemote?.state == .loaded)
         #expect(browser.remoteSessions.sessions.first?.id == session.id)
-        #expect(browser.selectedEntryID == SidebarEntry.remoteID(session.id))
+        #expect(browser.selectedSessionID == session.id)
         #expect(storage.load() == ModelChoice(model: "opus", provider: "anthropic"))
         #expect(!browser.isCreating)
         // Nothing to load: the session was just created.
@@ -105,7 +98,7 @@ struct ConversationBrowserTests {
         let browser = makeBrowser(instance: instance)
         let session = try await browser.createConversation(model: "opus")
 
-        browser.selectEntry(nil)
+        browser.selectSession(nil)
 
         await waitUntil { await instance.deleted == [session.id] }
         #expect(await instance.deleted == [session.id])
@@ -139,7 +132,7 @@ struct ConversationBrowserTests {
 
         #expect(transcript.title == "Trip plans")
         #expect(browser.remoteSessions.sessions.first?.title == "Trip plans")
-        browser.selectEntry(nil)
+        browser.selectSession(nil)
         try await Task.sleep(for: .milliseconds(20))
         #expect(await instance.deleted.isEmpty)
         #expect(browser.remoteSessions.sessions.map(\.id) == [session.id])
@@ -154,8 +147,7 @@ struct ConversationBrowserTests {
             messages: [SessionMessage(id: "1", role: "user", content: "Hi")],
             hasMore: false
         ))
-        let browser = ConversationBrowser(
-            store: InMemoryConversationStore(), remoteSessions: RemoteSessionList(source: source))
+        let browser = ConversationBrowser(remoteSessions: RemoteSessionList(source: source))
 
         browser.openRemote(RemoteSession(id: "remote-1"))
         await waitUntil { await source.pendingCount == 1 }
@@ -167,51 +159,33 @@ struct ConversationBrowserTests {
         #expect(await source.requestCount == 1)
     }
 
-    @Test("a row id opens its conversation: a session, or a read-only one saved on this device")
-    func selectEntryOpensRows() async throws {
+    @Test("a session id from the list opens it, nil closes it")
+    func selectSessionOpensRows() async throws {
         let instance = FakeInstance(sessions: [RemoteSession(id: "remote-1", title: "Notes")])
-        let store = InMemoryConversationStore()
-        let local = try store.createConversation(title: "Old chat")
-        try store.replaceMessages([StoredMessage(role: "user", content: "Hi")], inConversation: local.id)
-        let browser = makeBrowser(instance: instance, store: store)
+        let browser = makeBrowser(instance: instance)
         await browser.reloadSessions()
 
-        browser.selectEntry(SidebarEntry.remoteID("remote-1"))
+        browser.selectSession("remote-1")
         #expect(browser.openedRemote?.title == "Notes")
-        #expect(browser.archived == nil)
+        #expect(browser.selectedSessionID == "remote-1")
 
-        browser.selectEntry(SidebarEntry.localID(local.id))
+        browser.selectSession(nil)
         #expect(browser.openedRemote == nil)
-        #expect(browser.archived?.messages.map(\.content) == ["Hi"])
-        #expect(browser.selectedEntryID == SidebarEntry.localID(local.id))
-
-        browser.selectEntry(nil)
-        #expect(browser.archived == nil)
-        #expect(browser.selectedEntryID == nil)
+        #expect(browser.selectedSessionID == nil)
     }
 
-    @Test("selecting the open session again keeps its transcript; an unknown row changes nothing")
+    @Test("selecting the open session again keeps its transcript; an unknown id changes nothing")
     func reselectKeepsTranscript() async {
         let instance = FakeInstance(sessions: [RemoteSession(id: "remote-1")])
         let browser = makeBrowser(instance: instance)
         await browser.reloadSessions()
-        browser.selectEntry(SidebarEntry.remoteID("remote-1"))
+        browser.selectSession("remote-1")
         let transcript = browser.openedRemote
 
-        browser.selectEntry(SidebarEntry.remoteID("remote-1"))
-        browser.selectEntry(SidebarEntry.remoteID("unknown"))
-        browser.selectEntry("garbage")
+        browser.selectSession("remote-1")
+        browser.selectSession("unknown")
 
         #expect(browser.openedRemote === transcript)
-    }
-
-    @Test("row ids round-trip to their local and remote ids")
-    func rowIDsRoundTrip() {
-        let id = UUID()
-        #expect(SidebarEntry.localUUID(from: SidebarEntry.localID(id)) == id)
-        #expect(SidebarEntry.remoteSessionID(from: SidebarEntry.remoteID("abc")) == "abc")
-        #expect(SidebarEntry.localUUID(from: SidebarEntry.remoteID("abc")) == nil)
-        #expect(SidebarEntry.remoteSessionID(from: SidebarEntry.localID(id)) == nil)
     }
 
     // MARK: Rename and delete on the instance
@@ -221,7 +195,7 @@ struct ConversationBrowserTests {
         let instance = FakeInstance(sessions: [RemoteSession(id: "a", title: "A"), RemoteSession(id: "b", title: "B")])
         let browser = makeBrowser(instance: instance)
         await browser.reloadSessions()
-        browser.selectEntry(SidebarEntry.remoteID("b"))
+        browser.selectSession("b")
 
         try await browser.renameSession("b", to: "  Budget  ")
         try await browser.renameSession("b", to: "   ")
@@ -236,7 +210,7 @@ struct ConversationBrowserTests {
         let instance = FakeInstance(sessions: [RemoteSession(id: "a"), RemoteSession(id: "b")])
         let browser = makeBrowser(instance: instance)
         await browser.reloadSessions()
-        browser.selectEntry(SidebarEntry.remoteID("b"))
+        browser.selectSession("b")
 
         try await browser.deleteSession("b")
 
@@ -251,7 +225,7 @@ struct ConversationBrowserTests {
         await instance.failDeletes(with: .http(status: 409))
         let browser = makeBrowser(instance: instance)
         await browser.reloadSessions()
-        browser.selectEntry(SidebarEntry.remoteID("a"))
+        browser.selectSession("a")
 
         await #expect(throws: HermesAPIError.http(status: 409)) {
             try await browser.deleteSession("a")
@@ -259,26 +233,5 @@ struct ConversationBrowserTests {
 
         #expect(browser.remoteSessions.sessions.map(\.id) == ["a"])
         #expect(browser.openedRemote?.sessionID == "a")
-    }
-
-    // MARK: Conversations saved on this device
-
-    @Test("a conversation saved on this device can be renamed, exported and deleted")
-    func localConversation() throws {
-        let store = InMemoryConversationStore()
-        let conversation = try store.createConversation(title: "Old chat")
-        let browser = makeBrowser(store: store)
-        browser.select(conversation.id)
-
-        try browser.rename(conversation.id, to: "  Archive  ")
-        try browser.rename(conversation.id, to: "  ")
-        #expect(browser.summaries.first?.title == "Archive")
-        #expect(browser.archived?.title == "Archive")
-        #expect(browser.export(conversation.id) != nil)
-
-        try browser.delete(conversation.id)
-        #expect(browser.summaries.isEmpty)
-        #expect(browser.archived == nil)
-        #expect(browser.selectedID == nil)
     }
 }
