@@ -72,22 +72,29 @@ public final class ConversationBrowser {
         }
     }
 
-    /// The model a new conversation starts on: the last one chosen, else the default model.
-    public var preferredModel: String {
-        lastModel?.load() ?? model
+    /// The instance's default model, with no provider: the one set in the settings.
+    public var defaultChoice: ModelChoice {
+        ModelChoice(model: model)
     }
 
-    /// Creates a conversation bound to `model` and opens it. A chosen model is remembered as the last used one.
-    /// A `nil` or blank model falls back to `preferredModel` and is not remembered.
+    /// The model a new conversation starts on: the last one chosen, else the default model.
+    public var preferredChoice: ModelChoice {
+        lastModel?.load() ?? defaultChoice
+    }
+
+    /// Creates a conversation bound to `model` on `provider` and opens it. A chosen model is remembered as
+    /// the last used one. A `nil` or blank model falls back to `preferredChoice` and is not remembered.
     @discardableResult
-    public func createConversation(model chosen: String? = nil) throws -> UUID {
-        let trimmed = chosen?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    public func createConversation(model chosen: String? = nil, provider: String? = nil) throws -> UUID {
+        let explicit = chosen.flatMap { ModelChoice(model: $0, provider: provider).normalized }
+        let choice = explicit ?? preferredChoice
         let conversation = try store.createConversation(
             title: ConversationTitle.placeholder,
-            model: trimmed.isEmpty ? preferredModel : trimmed
+            model: choice.model,
+            provider: choice.provider
         )
-        if !trimmed.isEmpty {
-            lastModel?.save(trimmed)
+        if let explicit {
+            lastModel?.save(explicit)
         }
         refresh()
         select(conversation.id)

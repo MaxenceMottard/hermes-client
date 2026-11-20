@@ -3,17 +3,24 @@ import HermesChat
 import SwiftUI
 
 /// Shown before a new conversation starts: pick the model it will talk to.
-/// Lists the instance models with the last used one preselected, or falls back to a text field.
+/// Lists the models grouped by provider, as the dashboard does, with the last used one preselected.
+/// Falls back to text fields when the instance gives no list.
 struct NewConversationView: View {
     /// Called with the chosen model when the user taps Start.
-    let onStart: (String) -> Void
+    let onStart: (ModelChoice) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var picker: ModelPicker
 
-    init(catalog: (any ModelCatalog)?, preferredModel: String, onStart: @escaping (String) -> Void) {
+    init(
+        catalog: (any ModelCatalog)?,
+        preferred: ModelChoice,
+        defaultChoice: ModelChoice,
+        onStart: @escaping (ModelChoice) -> Void
+    ) {
         self.onStart = onStart
-        _picker = State(initialValue: ModelPicker(catalog: catalog, preferred: preferredModel))
+        _picker = State(
+            initialValue: ModelPicker(catalog: catalog, preferred: preferred, defaultChoice: defaultChoice))
     }
 
     var body: some View {
@@ -27,7 +34,7 @@ struct NewConversationView: View {
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Start", action: start)
-                            .disabled(picker.chosenModel == nil)
+                            .disabled(picker.chosen == nil)
                     }
                 }
         }
@@ -40,29 +47,27 @@ struct NewConversationView: View {
         case .loading:
             ProgressView("Loading models…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        case .list(let models):
-            List(models, id: \.self) { model in
-                Button {
-                    picker.selection = model
-                } label: {
-                    HStack {
-                        Text(model)
-                            .foregroundStyle(.primary)
-                        Spacer()
-                        if model == picker.selection {
-                            Image(systemName: "checkmark")
-                                .foregroundStyle(.tint)
+        case .sections(let sections):
+            List {
+                ForEach(sections) { section in
+                    Section {
+                        if picker.isExpanded(section.id) {
+                            ForEach(section.choices, id: \.self) { choice in
+                                row(choice)
+                            }
                         }
+                    } header: {
+                        sectionHeader(section)
                     }
-                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(model == picker.selection ? .isSelected : [])
             }
         case .manual(let reason):
             Form {
                 Section {
-                    TextField("Model name", text: $picker.selection)
+                    TextField("Model name", text: $picker.selection.model)
+                        .autocorrectionDisabled()
+                        .onSubmit(start)
+                    TextField("Provider (optional)", text: providerText)
                         .autocorrectionDisabled()
                         .onSubmit(start)
                 } footer: {
@@ -72,15 +77,67 @@ struct NewConversationView: View {
         }
     }
 
+    /// Tappable section header: the provider name, its model count, and a chevron that shows whether
+    /// the section is open. A custom header works in every list style, unlike `Section(isExpanded:)`.
+    private func sectionHeader(_ section: ModelSection) -> some View {
+        let expanded = picker.isExpanded(section.id)
+        return Button {
+            withAnimation {
+                picker.toggle(section.id)
+            }
+        } label: {
+            HStack {
+                Text(section.title)
+                Text("\(section.choices.count)")
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .rotationEffect(.degrees(expanded ? 90 : 0))
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(section.title)
+        .accessibilityValue(expanded ? "Expanded" : "Collapsed")
+        .accessibilityHint("Shows or hides the models")
+    }
+
+    private func row(_ choice: ModelChoice) -> some View {
+        Button {
+            picker.selection = choice
+        } label: {
+            HStack {
+                Text(choice.model)
+                    .foregroundStyle(.primary)
+                Spacer()
+                if choice == picker.selection {
+                    Image(systemName: "checkmark")
+                        .foregroundStyle(.tint)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(choice == picker.selection ? .isSelected : [])
+    }
+
+    /// The provider text field edits `selection.provider`; an empty field means no provider.
+    private var providerText: Binding<String> {
+        Binding(
+            get: { picker.selection.provider ?? "" },
+            set: { picker.selection.provider = $0.isEmpty ? nil : $0 }
+        )
+    }
+
     private func manualFooter(_ reason: HermesAPIError?) -> String {
-        let explanation = "Type the name of the model to use."
+        let explanation = "Type the name of the model to use, and its provider (for example anthropic) to use a provider model."
         guard let description = reason?.errorDescription else { return explanation }
         return "The model list is unavailable: \(description) \(explanation)"
     }
 
     private func start() {
-        guard let model = picker.chosenModel else { return }
-        onStart(model)
+        guard let choice = picker.chosen else { return }
+        onStart(choice)
         dismiss()
     }
 }

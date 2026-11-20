@@ -29,10 +29,12 @@
         @Test("the model is saved with the conversation and shown in its summary")
         func keepsModel() throws {
             let store = try makeStore()
-            let created = try store.createConversation(title: "First", model: "some-model")
+            let created = try store.createConversation(title: "First", model: "some-model", provider: "anthropic")
 
             #expect(try store.conversation(id: created.id)?.model == "some-model")
+            #expect(try store.conversation(id: created.id)?.provider == "anthropic")
             #expect(try store.summaries().first?.model == "some-model")
+            #expect(try store.summaries().first?.provider == "anthropic")
         }
 
         @Test("rename and delete")

@@ -38,6 +38,15 @@ struct InMemoryConversationStoreTests {
         #expect(try store.summaries().first?.model == "some-model")
     }
 
+    @Test("the provider given at creation is kept in the conversation and its summary")
+    func createKeepsProvider() throws {
+        let (store, _) = makeStore()
+        let created = try store.createConversation(title: "T", model: "opus", provider: "anthropic")
+
+        #expect(try store.conversation(id: created.id)?.provider == "anthropic")
+        #expect(try store.summaries().first?.provider == "anthropic")
+    }
+
     @Test("a conversation created without a model has none")
     func createWithoutModel() throws {
         let (store, _) = makeStore()

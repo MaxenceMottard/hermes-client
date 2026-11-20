@@ -43,11 +43,16 @@ public struct HermesClient: Sendable {
     ///
     /// The stream finishes on `data: [DONE]` (or at the end of the response). Cancelling the
     /// consuming task, or leaving the `for try await` loop, cancels the network request.
-    public func streamChat(model: String, messages: [ChatMessage]) -> AsyncThrowingStream<String, any Error> {
+    /// `provider` selects a provider model (see `ChatRequest.provider`); `nil` lets the instance pick.
+    public func streamChat(
+        model: String,
+        provider: String? = nil,
+        messages: [ChatMessage]
+    ) -> AsyncThrowingStream<String, any Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
-                    let request = try makeRequest(model: model, messages: messages, stream: true)
+                    let request = try makeRequest(model: model, provider: provider, messages: messages, stream: true)
                     #if canImport(Darwin)
                         let (bytes, response) = try await session.bytes(for: request)
                         try Self.validate(response, requestURL: request.url)
@@ -183,9 +188,9 @@ public struct HermesClient: Sendable {
     }
 
     /// Sends the conversation without streaming and returns the text of the first choice.
-    public func chat(model: String, messages: [ChatMessage]) async throws -> String {
+    public func chat(model: String, provider: String? = nil, messages: [ChatMessage]) async throws -> String {
         do {
-            let request = try makeRequest(model: model, messages: messages, stream: false)
+            let request = try makeRequest(model: model, provider: provider, messages: messages, stream: false)
             let (data, response) = try await session.data(for: request)
             try Self.validate(response, requestURL: request.url)
 
@@ -344,15 +349,44 @@ public struct HermesClient: Sendable {
         }
     }
 
+    /// Lists the provider catalog from `GET {baseURL}/api/model/options?include_unconfigured=false`:
+    /// the models grouped by provider, as the dashboard's model picker shows them.
+    ///
+    /// Like `listModels()`, a failed listing is not an error: any HTTP, network, timeout or contract failure,
+    /// or a catalog with no usable provider, returns `.fallback` with the reason. Only cancellation throws.
+    public func listModelOptions() async throws -> ModelOptionsResult {
+        do {
+            let request = makeRequest(
+                method: "GET",
+                path: HermesAPIPaths.modelOptions,
+                accept: "application/json",
+                query: [URLQueryItem(name: "include_unconfigured", value: "false")]
+            )
+            let (data, response) = try await session.data(for: request)
+            try Self.validate(response, requestURL: request.url)
+            let options = try JSONDecoder().decode(ModelOptionsPayload.self, from: data).options
+            guard !options.providers.isEmpty else {
+                return .fallback(.invalidResponse)
+            }
+            return .options(options)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as URLError where error.code == .cancelled {
+            throw CancellationError()
+        } catch {
+            return .fallback(HermesAPIError.from(error))
+        }
+    }
+
     /// Builds `POST {baseURL}/v1/chat/completions`. Internal for tests.
-    func makeRequest(model: String, messages: [ChatMessage], stream: Bool) throws -> URLRequest {
+    func makeRequest(model: String, provider: String? = nil, messages: [ChatMessage], stream: Bool) throws -> URLRequest {
         var request = makeRequest(
             method: "POST",
             path: HermesAPIPaths.chatCompletions,
             accept: stream ? "text/event-stream" : "application/json"
         )
         request.httpBody = try JSONEncoder().encode(
-            ChatRequest(model: model, messages: messages, stream: stream)
+            ChatRequest(model: model, provider: provider, messages: messages, stream: stream)
         )
         return request
     }

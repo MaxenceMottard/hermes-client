@@ -9,15 +9,18 @@
         var title: String
         /// Optional so that stores created before this field existed migrate without a custom plan.
         var model: String?
+        /// Optional for the same reason as `model`.
+        var provider: String?
         var createdAt: Date
         var updatedAt: Date
         @Relationship(deleteRule: .cascade, inverse: \MessageRecord.conversation)
         var messages: [MessageRecord]
 
-        init(id: UUID, title: String, model: String?, createdAt: Date, updatedAt: Date) {
+        init(id: UUID, title: String, model: String?, provider: String?, createdAt: Date, updatedAt: Date) {
             self.id = id
             self.title = title
             self.model = model
+            self.provider = provider
             self.createdAt = createdAt
             self.updatedAt = updatedAt
             messages = []
@@ -62,9 +65,10 @@
             var descriptor = FetchDescriptor<ConversationRecord>(
                 sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
             )
-            descriptor.propertiesToFetch = [\.id, \.title, \.model, \.updatedAt]
+            descriptor.propertiesToFetch = [\.id, \.title, \.model, \.provider, \.updatedAt]
             return try context.fetch(descriptor).map {
-                ConversationSummary(id: $0.id, title: $0.title, model: $0.model, updatedAt: $0.updatedAt)
+                ConversationSummary(
+                    id: $0.id, title: $0.title, model: $0.model, provider: $0.provider, updatedAt: $0.updatedAt)
             }
         }
 
@@ -74,6 +78,7 @@
                 id: record.id,
                 title: record.title,
                 model: record.model,
+                provider: record.provider,
                 createdAt: record.createdAt,
                 updatedAt: record.updatedAt,
                 messages: record.messages
@@ -83,15 +88,16 @@
         }
 
         @discardableResult
-        public func createConversation(title: String, model: String?) throws -> StoredConversation {
+        public func createConversation(title: String, model: String?, provider: String?) throws -> StoredConversation {
             let date = Date()
             let record = ConversationRecord(
-                id: UUID(), title: title, model: model, createdAt: date, updatedAt: date
+                id: UUID(), title: title, model: model, provider: provider, createdAt: date, updatedAt: date
             )
             context.insert(record)
             try context.save()
             return StoredConversation(
-                id: record.id, title: title, model: model, createdAt: date, updatedAt: date, messages: []
+                id: record.id, title: title, model: model, provider: provider,
+                createdAt: date, updatedAt: date, messages: []
             )
         }
 

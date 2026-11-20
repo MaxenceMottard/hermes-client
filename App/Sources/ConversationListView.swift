@@ -59,7 +59,7 @@ struct ConversationListView: View {
                 .lineLimit(1)
             HStack(spacing: 4) {
                 if let model = summary.model {
-                    Text(model)
+                    Text(ModelChoice.displayName(model: model, provider: summary.provider))
                         .lineLimit(1)
                     Text("·")
                 }

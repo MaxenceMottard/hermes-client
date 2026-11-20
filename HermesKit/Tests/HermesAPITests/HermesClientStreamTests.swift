@@ -454,4 +454,65 @@ struct HermesClientStreamTests {
         let result = try await makeClient().listModels()
         #expect(result == .fallback(.invalidResponse))
     }
+    @Test("listModelOptions: providers grouped as listed, without unusable ones or unavailable models")
+    func listModelOptionsSuccess() async throws {
+        let json = try fixtureData("model_options", "json")
+        MockURLProtocol.responder = { _ in MockReply(chunks: [json]) }
+
+        let result = try await makeClient().listModelOptions()
+
+        #expect(
+            result
+                == .options(
+                    ModelOptions(
+                        providers: [
+                            ModelProviderOption(
+                                slug: "anthropic", name: "Anthropic",
+                                models: ["claude-opus-test", "claude-sonnet-test"], isCurrent: true),
+                            ModelProviderOption(slug: "openai", name: "OpenAI", models: ["gpt-test"]),
+                        ],
+                        currentModel: "claude-opus-test",
+                        currentProvider: "anthropic"
+                    )))
+        let request = try #require(MockURLProtocol.requests.first)
+        #expect(request.httpMethod == "GET")
+        #expect(
+            request.url?.absoluteString
+                == "https://hermes.example.test/api/model/options?include_unconfigured=false")
+        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer test-key-123")
+    }
+
+    @Test("listModelOptions: a 404 returns the fallback with notFound")
+    func listModelOptionsNotFound() async throws {
+        MockURLProtocol.responder = { _ in MockReply(status: 404) }
+        let result = try await makeClient().listModelOptions()
+        #expect(result == .fallback(.notFound))
+    }
+
+    @Test("listModelOptions: a login page returns the fallback with invalidResponse")
+    func listModelOptionsHTML() async throws {
+        MockURLProtocol.responder = { _ in MockReply(chunks: [Data("<html>Log in</html>".utf8)]) }
+        let result = try await makeClient().listModelOptions()
+        #expect(result == .fallback(.invalidResponse))
+    }
+
+    @Test("listModelOptions: a catalog with no usable provider returns the fallback with invalidResponse")
+    func listModelOptionsNoUsableProvider() async throws {
+        let json = Data(#"{"providers":[{"slug":"xai","models":["grok"],"authenticated":false}]}"#.utf8)
+        MockURLProtocol.responder = { _ in MockReply(chunks: [json]) }
+        let result = try await makeClient().listModelOptions()
+        #expect(result == .fallback(.invalidResponse))
+    }
+
+    @Test("streamChat sends the provider with the model when one is given")
+    func streamChatSendsProvider() async throws {
+        MockURLProtocol.responder = { _ in MockReply(chunks: [Data("data: [DONE]\n".utf8)]) }
+
+        _ = try await collect(makeClient().streamChat(model: "claude-opus-test", provider: "anthropic", messages: messages))
+
+        let body = try #require(MockURLProtocol.bodies.first)
+        let object = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+        #expect(object["model"] as? String == "claude-opus-test")
+        #expect(object["provider"] as? String == "anthropic")
+    }
 }
