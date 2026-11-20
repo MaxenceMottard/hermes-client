@@ -23,6 +23,7 @@ struct ConversationsView: View {
             } else if let session = browser.session {
                 ChatView(session: session)
                     .navigationTitle(currentTitle)
+                    .navigationSubtitle(session.model)
                     .inlineNavigationTitle()
                     .toolbar {
                         if let export = currentExport {
