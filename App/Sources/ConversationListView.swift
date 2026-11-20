@@ -5,13 +5,12 @@ import SwiftUI
 
 /// Sidebar: one list of the conversations on this device and the sessions on the Hermes instance,
 /// most recently used first. Local conversations open and can be renamed or deleted. A remote session
-/// opens read-only in a sheet.
+/// opens read-only in the detail pane.
 struct ConversationListView: View {
     let browser: ConversationBrowser
 
     @State private var renamingID: UUID?
     @State private var draftTitle = ""
-    @State private var openedTranscript: RemoteTranscript?
 
     var body: some View {
         List(selection: selection) {
@@ -26,9 +25,6 @@ struct ConversationListView: View {
             if let remote = browser.remoteSessions {
                 RemoteStatusRows(list: remote)
             }
-        }
-        .sheet(item: $openedTranscript) { transcript in
-            RemoteTranscriptView(transcript: transcript)
         }
         .task {
             await browser.remoteSessions?.reload()
@@ -89,7 +85,7 @@ struct ConversationListView: View {
 
     private func remoteRow(_ session: RemoteSession) -> some View {
         Button {
-            openedTranscript = browser.remoteSessions?.transcript(for: session)
+            browser.openRemote(session)
         } label: {
             VStack(alignment: .leading, spacing: 2) {
                 Text(session.title ?? "Untitled session")
