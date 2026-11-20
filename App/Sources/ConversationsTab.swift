@@ -1,0 +1,35 @@
+import HermesChat
+import SwiftUI
+
+/// Chat tab: a split view with the conversation list and the open chat.
+/// On compact widths the split view collapses into a navigation stack.
+struct ConversationsTab: View {
+    let browser: ConversationBrowser
+
+    var body: some View {
+        NavigationSplitView {
+            ConversationListView(browser: browser)
+                .navigationTitle("Conversations")
+                .toolbar {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button("New conversation", systemImage: "square.and.pencil") {
+                            try? browser.createConversation()
+                        }
+                    }
+                }
+        } detail: {
+            if let session = browser.session {
+                ChatView(session: session)
+                    .navigationTitle(currentTitle)
+                    .navigationBarTitleDisplayMode(.inline)
+            }
+        }
+        .onChange(of: browser.session?.phase) {
+            browser.refresh()
+        }
+    }
+
+    private var currentTitle: String {
+        browser.summaries.first { $0.id == browser.selectedID }?.title ?? ConversationTitle.placeholder
+    }
+}
