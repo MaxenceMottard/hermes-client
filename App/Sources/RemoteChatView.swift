@@ -14,6 +14,10 @@ struct RemoteChatView: View {
     /// Set when the reader stops on the oldest shown line; cleared once the older page is in place.
     @State private var loadingOlder = false
     @FocusState private var isComposerFocused: Bool
+    /// `false` while the reader is scrolled away from the newest line: shows the scroll-to-bottom button.
+    @State private var isAtBottom = true
+    /// Top of the composer inset on screen: the visible part of the transcript ends there.
+    @State private var composerTop = CGFloat.greatestFiniteMagnitude
 
     var body: some View {
         VStack(spacing: 0) {
@@ -30,6 +34,10 @@ struct RemoteChatView: View {
                 }
                 .scrollTargetLayout()
                 .padding()
+
+                ScrollBottomMarker(visibleEnd: composerTop, isAtBottom: $isAtBottom) {
+                    Task { await scrollToLastLine(animation: .smooth(duration: 0.25)) }
+                }
             }
             // Before the inset, so a tap on the composer does not hide the keyboard.
             .dismissesKeyboard($isComposerFocused)
@@ -93,6 +101,16 @@ struct RemoteChatView: View {
                         onStop: { transcript.stop() }
                     )
                 }
+                .reportsTop($composerTop)
+                .scrollToBottomButton(isVisible: !isAtBottom) {
+                    Task {
+                        await scrollToLastLine()
+                        // Lines far up have estimated heights: an animated jump from there can stop short.
+                        if !isAtBottom {
+                            await scrollToNewest()
+                        }
+                    }
+                }
             }
         }
         .navigationTitle(transcript.title ?? "Untitled session")
@@ -109,6 +127,26 @@ struct RemoteChatView: View {
         .onChange(of: transcript.state) { oldState, newState in
             if oldState == .loading, newState == .loaded, scrolledID == nil {
                 Task { await scrollToNewest() }
+            }
+        }
+    }
+
+    /// Scrolls to the newest line in one move, so it can be animated. Setting the position to the last
+    /// line with the `.top` anchor stops at the end of the content.
+    ///
+    /// The binding is only written back when the reader scrolls: after a programmatic jump it can still
+    /// hold the last line, and setting the same id again does nothing. It is cleared first in that case.
+    private func scrollToLastLine(animation: Animation = .default) async {
+        guard let lastID = transcript.lines.last?.id else { return }
+        if scrolledID == lastID {
+            scrolledID = nil
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        await withCheckedContinuation { continuation in
+            withAnimation(animation) {
+                scrolledID = lastID
+            } completion: {
+                continuation.resume()
             }
         }
     }
