@@ -1,6 +1,5 @@
 import Foundation
 import HermesAPI
-import HermesStore
 import Testing
 
 @testable import HermesChat
@@ -45,11 +44,7 @@ actor HangingChatStreamSource: SessionListing {
 @Suite("ConversationBrowser live replies")
 struct ConversationBrowserLiveReplyTests {
     private func makeBrowser(source: any SessionListing) -> ConversationBrowser {
-        ConversationBrowser(
-            store: InMemoryConversationStore(),
-            remoteSessions: RemoteSessionList(source: source),
-            model: "m"
-        )
+        ConversationBrowser(remoteSessions: RemoteSessionList(source: source), model: "m")
     }
 
     @Test("a session left while its reply streams opens again on the same transcript, not reloaded")
@@ -63,7 +58,7 @@ struct ConversationBrowserLiveReplyTests {
         let send = Task { await transcript.send("Hi") }
         await waitUntil { transcript.lines.last?.text == "Hel" }
 
-        browser.selectEntry(nil)
+        browser.selectSession(nil)
         browser.openRemote(remote)
 
         #expect(browser.openedRemote === transcript)
@@ -102,7 +97,7 @@ struct ConversationBrowserLiveReplyTests {
         let transcript = try #require(browser.openedRemote)
         await transcript.send("Hi")
 
-        browser.selectEntry(nil)
+        browser.selectSession(nil)
         browser.openRemote(remote)
 
         #expect(browser.openedRemote !== transcript)
@@ -117,7 +112,7 @@ struct ConversationBrowserLiveReplyTests {
         await transcript.load()
         let send = Task { await transcript.send("Hi") }
         await waitUntil { transcript.lines.last?.text == "Hel" }
-        browser.selectEntry(nil)
+        browser.selectSession(nil)
 
         try await browser.deleteSession("api-1")
         await send.value

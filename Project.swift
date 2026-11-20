@@ -50,7 +50,6 @@ let project = Project(
             resources: ["App/Resources/**"],
             dependencies: [
                 .package(product: "HermesAPI"),
-                .package(product: "HermesStore"),
                 .package(product: "HermesSecurity"),
                 .package(product: "HermesChat"),
             ]

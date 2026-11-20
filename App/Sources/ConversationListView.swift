@@ -1,37 +1,24 @@
 import HermesAPI
 import HermesChat
-import HermesStore
 import SwiftUI
 
-/// Sidebar: the conversations, most recently used first. Each is a session on the Hermes instance; the
-/// conversations saved on this device by earlier versions of the app are listed too, marked as such.
+/// Sidebar: the conversations, most recently used first. Each is a session on the Hermes instance.
 /// Every row can be renamed or deleted, from its context menu or a swipe.
 struct ConversationListView: View {
     let browser: ConversationBrowser
     /// Set to the reason when a rename or a delete fails.
     @Binding var failure: String?
 
-    /// The conversation being renamed, and the title being typed.
-    @State private var renaming: Target?
+    /// The id of the session being renamed, and the title being typed.
+    @State private var renaming: String?
     @State private var draftTitle = ""
-    /// The conversation waiting for the delete confirmation.
-    @State private var deleting: Target?
-
-    /// A row the user acts on: a session on the instance, or a conversation saved on this device.
-    enum Target: Equatable {
-        case remote(String)
-        case local(UUID)
-    }
+    /// The id of the session waiting for the delete confirmation.
+    @State private var deleting: String?
 
     var body: some View {
         List(selection: selection) {
-            ForEach(entries) { entry in
-                switch entry {
-                case .local(let summary):
-                    localRow(summary)
-                case .remote(let session):
-                    remoteRow(session)
-                }
+            ForEach(browser.remoteSessions.recentFirst) { session in
+                row(session)
             }
             RemoteStatusRows(list: browser.remoteSessions)
         }
@@ -58,25 +45,16 @@ struct ConversationListView: View {
             isPresented: isDeleting,
             titleVisibility: .visible,
             presenting: deleting
-        ) { target in
+        ) { sessionID in
             Button("Delete", role: .destructive) {
-                delete(target)
+                delete(sessionID)
             }
-        } message: { target in
-            switch target {
-            case .remote:
-                Text("It is deleted from your Hermes instance, with all its messages.")
-            case .local:
-                Text("It is deleted from this device.")
-            }
+        } message: { _ in
+            Text("It is deleted from your Hermes instance, with all its messages.")
         }
     }
 
-    private var entries: [SidebarEntry] {
-        SidebarEntry.merged(local: browser.summaries, remote: browser.remoteSessions.sessions)
-    }
-
-    private func remoteRow(_ session: RemoteSession) -> some View {
+    private func row(_ session: RemoteSession) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(session.title ?? ConversationTitle.placeholder)
                 .lineLimit(1)
@@ -86,64 +64,34 @@ struct ConversationListView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .tag(SidebarEntry.remoteID(session.id))
+        .tag(session.id)
         .modifier(RowActions(
-            onRename: { startRenaming(.remote(session.id), title: session.title ?? "") },
-            onDelete: { deleting = .remote(session.id) }
+            onRename: { startRenaming(session.id, title: session.title ?? "") },
+            onDelete: { deleting = session.id }
         ))
     }
 
-    private func localRow(_ summary: ConversationSummary) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(summary.title)
-                .lineLimit(1)
-            HStack(spacing: 4) {
-                Label("On this device", systemImage: "iphone")
-                    .labelStyle(.titleAndIcon)
-                Text("·")
-                Text(summary.updatedAt, style: .relative)
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        }
-        .tag(SidebarEntry.localID(summary.id))
-        .modifier(RowActions(
-            onRename: { startRenaming(.local(summary.id), title: summary.title) },
-            onDelete: { deleting = .local(summary.id) }
-        ))
-    }
-
-    private func startRenaming(_ target: Target, title: String) {
+    private func startRenaming(_ sessionID: String, title: String) {
         draftTitle = title
-        renaming = target
+        renaming = sessionID
     }
 
-    private func rename(_ target: Target, to title: String) {
-        switch target {
-        case .local(let id):
-            try? browser.rename(id, to: title)
-        case .remote(let id):
-            Task {
-                do {
-                    try await browser.renameSession(id, to: title)
-                } catch {
-                    failure = "The conversation could not be renamed. \(ConversationsView.reason(error))"
-                }
+    private func rename(_ sessionID: String, to title: String) {
+        Task {
+            do {
+                try await browser.renameSession(sessionID, to: title)
+            } catch {
+                failure = "The conversation could not be renamed. \(ConversationsView.reason(error))"
             }
         }
     }
 
-    private func delete(_ target: Target) {
-        switch target {
-        case .local(let id):
-            try? browser.delete(id)
-        case .remote(let id):
-            Task {
-                do {
-                    try await browser.deleteSession(id)
-                } catch {
-                    failure = "The conversation could not be deleted. \(ConversationsView.reason(error))"
-                }
+    private func delete(_ sessionID: String) {
+        Task {
+            do {
+                try await browser.deleteSession(sessionID)
+            } catch {
+                failure = "The conversation could not be deleted. \(ConversationsView.reason(error))"
             }
         }
     }
@@ -152,8 +100,8 @@ struct ConversationListView: View {
     /// the list selection pushes the detail: a row outside it never opens.
     private var selection: Binding<String?> {
         Binding(
-            get: { browser.selectedEntryID },
-            set: { browser.selectEntry($0) }
+            get: { browser.selectedSessionID },
+            set: { browser.selectSession($0) }
         )
     }
 

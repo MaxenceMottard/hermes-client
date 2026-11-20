@@ -1,11 +1,9 @@
 import HermesAPI
 import HermesChat
 import HermesSecurity
-import HermesStore
 import Observation
 
-/// Composition root: loads the saved settings, opens the conversation store, and builds the browser
-/// once the configuration is complete.
+/// Composition root: loads the saved settings and builds the browser once the configuration is complete.
 @MainActor
 @Observable
 final class AppState {
@@ -16,33 +14,20 @@ final class AppState {
 
     private let settingsStorage: any SettingsStorage
     private let secrets: any SecretStore
-    private let store: any ConversationStore
     private static let apiKeyAccount = "api-key"
 
     init(
         settingsStorage: any SettingsStorage = UserDefaultsSettingsStorage(),
-        secrets: any SecretStore = KeychainSecretStore(),
-        store: any ConversationStore = AppState.makeDefaultStore()
+        secrets: any SecretStore = KeychainSecretStore()
     ) {
         self.settingsStorage = settingsStorage
         self.secrets = secrets
-        self.store = store
         settings = settingsStorage.load()
         rebuildBrowser()
     }
 
     var apiKey: String? {
         try? secrets.read(account: Self.apiKeyAccount)
-    }
-
-    /// SwiftData when the container opens, otherwise an in-memory store so that the app still starts.
-    static func makeDefaultStore() -> any ConversationStore {
-        do {
-            let container = try SwiftDataConversationStore.makeContainer()
-            return SwiftDataConversationStore(container: container)
-        } catch {
-            return InMemoryConversationStore()
-        }
     }
 
     /// Saves the settings and the key, then builds the browser. Throws if the key cannot be stored.
@@ -65,7 +50,6 @@ final class AppState {
         }
         let client = HermesClient(configuration: HermesClientConfiguration(baseURL: baseURL, apiKey: key))
         browser = ConversationBrowser(
-            store: store,
             remoteSessions: RemoteSessionList(source: client),
             lastModel: UserDefaultsLastModelStorage()
         )

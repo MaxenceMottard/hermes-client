@@ -1,6 +1,5 @@
 import HermesAPI
 import HermesChat
-import HermesStore
 import SwiftUI
 
 /// Chat tab: a split view with the conversation list and the open conversation.
@@ -33,15 +32,6 @@ struct ConversationsView: View {
                     ChatView(transcript: transcript)
                         // A new view per session: its draft and scroll position belong to one conversation.
                         .id(transcript.sessionID)
-                } else if let conversation = browser.archived {
-                    ArchivedChatView(conversation: conversation)
-                        .toolbar {
-                            if let export = browser.export(conversation.id) {
-                                ToolbarItem(placement: .primaryAction) {
-                                    ExportLink(export: export)
-                                }
-                            }
-                        }
                 } else if browser.isCreating {
                     ProgressView("Starting the conversation…")
                 } else {

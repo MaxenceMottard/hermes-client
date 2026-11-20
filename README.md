@@ -6,7 +6,7 @@ Native iOS and macOS client for a self-hosted [Hermes Agent](https://github.com/
 
 ## Planned features
 
-See the [milestones](../../milestones): OpenAI-compatible API client with SSE streaming, chat screen, SwiftData persistence, secure settings (Keychain), system integrations (MenuBarExtra, App Intents), polish.
+See the [milestones](../../milestones): OpenAI-compatible API client with SSE streaming, chat screen, secure settings (Keychain), system integrations (MenuBarExtra, App Intents), polish.
 
 ## Structure
 
@@ -18,7 +18,7 @@ mise.toml           project tools (tuist) and tasks
 HermesKit/          Local SPM package: business logic, testable without UI
   Sources/
     HermesAPI/        HTTP client, SSE parsing, Codable models, typed errors
-    HermesStore/      SwiftData persistence (coming in M3)
+    HermesChat/       Conversation logic: every conversation is a session on the instance
     HermesSecurity/   Keychain wrapper (coming in M4)
   Tests/
 ```
