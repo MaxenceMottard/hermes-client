@@ -54,29 +54,15 @@ enum ImageAttachmentLoader {
     }
 }
 
-/// A square image preview. `onRemove` adds a remove button for the composer.
+/// A square preview of an image in a message.
 struct AttachmentThumbnail: View {
     let data: Data
-    var onRemove: (() -> Void)?
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
-            (ImageAttachmentLoader.thumbnail(for: data) ?? Image(systemName: "photo"))
-                .resizable()
-                .scaledToFill()
-                .frame(width: 64, height: 64)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-
-            if let onRemove {
-                Button("Remove image", systemImage: "xmark.circle.fill") {
-                    onRemove()
-                }
-                .labelStyle(.iconOnly)
-                .symbolRenderingMode(.palette)
-                .foregroundStyle(.white, .black.opacity(0.6))
-                .buttonStyle(.plain)
-                .offset(x: 6, y: -6)
-            }
-        }
+        (ImageAttachmentLoader.thumbnail(for: data) ?? Image(systemName: "photo"))
+            .resizable()
+            .scaledToFill()
+            .frame(width: 64, height: 64)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
