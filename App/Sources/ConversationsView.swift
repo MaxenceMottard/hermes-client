@@ -2,9 +2,14 @@ import HermesChat
 import SwiftUI
 
 /// Chat tab: a split view with the conversation list and the open conversation.
+/// A new conversation starts on the model chosen in `NewConversationView`.
 /// On compact widths the split view collapses into a navigation stack.
 struct ConversationsView: View {
     let browser: ConversationBrowser
+    /// Lists the instance models for the new conversation screen. `nil` means the name is typed by hand.
+    let modelCatalog: (any ModelCatalog)?
+
+    @State private var isChoosingModel = false
 
     var body: some View {
         NavigationSplitView {
@@ -13,7 +18,7 @@ struct ConversationsView: View {
                 .toolbar {
                     ToolbarItem(placement: .primaryAction) {
                         Button("New conversation", systemImage: "square.and.pencil") {
-                            _ = try? browser.createConversation()
+                            isChoosingModel = true
                         }
                     }
                 }
@@ -36,6 +41,11 @@ struct ConversationsView: View {
         }
         .onChange(of: browser.session?.phase) {
             browser.refresh()
+        }
+        .sheet(isPresented: $isChoosingModel) {
+            NewConversationView(catalog: modelCatalog, preferredModel: browser.preferredModel) { model in
+                _ = try? browser.createConversation(model: model)
+            }
         }
     }
 
