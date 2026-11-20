@@ -13,6 +13,7 @@ struct RemoteChatView: View {
     @State private var scrolledID: String?
     /// Set when the reader stops on the oldest shown line; cleared once the older page is in place.
     @State private var loadingOlder = false
+    @FocusState private var isComposerFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -30,6 +31,8 @@ struct RemoteChatView: View {
                 .scrollTargetLayout()
                 .padding()
             }
+            // Before the inset, so a tap on the composer does not hide the keyboard.
+            .dismissesKeyboard($isComposerFocused)
             .scrollPosition(id: $scrolledID, anchor: .top)
             // Stopping on the oldest shown line pulls in the next older page.
             .onScrollPhaseChange { _, phase in
@@ -78,6 +81,7 @@ struct RemoteChatView: View {
 
                     ChatComposer(
                         draft: $draft,
+                        isFocused: $isComposerFocused,
                         model: transcript.model.map { ModelChoice(model: $0) },
                         isBusy: transcript.isSending,
                         canSend: !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
