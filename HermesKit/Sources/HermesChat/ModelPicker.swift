@@ -32,7 +32,7 @@ public struct ModelSection: Identifiable, Equatable, Sendable {
 /// shows them, or text fields when no list is available. The preferred model (the last one used) is
 /// preselected.
 ///
-/// `@Observable` is applied on Apple platforms, see `ChatSession` for why it is left out on Linux.
+/// `@Observable` is applied on Apple platforms, see `RemoteSessionList` for why it is left out on Linux.
 @MainActor
 #if !os(Linux)
     @Observable

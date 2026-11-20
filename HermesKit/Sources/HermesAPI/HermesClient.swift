@@ -27,7 +27,7 @@ extension HermesClientConfiguration: CustomStringConvertible, CustomDebugStringC
     public var debugDescription: String { description }
 }
 
-/// Client for a Hermes instance (OpenAI-compatible API).
+/// Client for a Hermes instance. Conversations are sessions stored on the instance (`/api/sessions`).
 ///
 /// POST requests are never retried automatically.
 public struct HermesClient: Sendable {
@@ -37,49 +37,6 @@ public struct HermesClient: Sendable {
     public init(configuration: HermesClientConfiguration, session: URLSession = .shared) {
         self.configuration = configuration
         self.session = session
-    }
-
-    /// Sends the conversation in streaming mode and emits the non-empty `delta.content` values, in order.
-    ///
-    /// The stream finishes on `data: [DONE]` (or at the end of the response). Cancelling the
-    /// consuming task, or leaving the `for try await` loop, cancels the network request.
-    /// `provider` selects a provider model (see `ChatRequest.provider`); `nil` lets the instance pick.
-    public func streamChat(
-        model: String,
-        provider: String? = nil,
-        messages: [ChatMessage]
-    ) -> AsyncThrowingStream<String, any Error> {
-        AsyncThrowingStream { continuation in
-            let task = Task {
-                do {
-                    let request = try makeRequest(model: model, provider: provider, messages: messages, stream: true)
-                    #if canImport(Darwin)
-                        let (bytes, response) = try await session.bytes(for: request)
-                        try Self.validate(response, requestURL: request.url)
-                        try await Self.forEachDelta(in: bytes) { continuation.yield($0) }
-                    #else
-                        // Linux (tests only): URLSession.bytes is unavailable, so the body is buffered.
-                        let (data, response) = try await session.data(for: request)
-                        try Self.validate(response, requestURL: request.url)
-                        let bytes = AsyncThrowingStream<UInt8, any Error> { source in
-                            for byte in data {
-                                source.yield(byte)
-                            }
-                            source.finish()
-                        }
-                        try await Self.forEachDelta(in: bytes) { continuation.yield($0) }
-                    #endif
-                    continuation.finish()
-                } catch is CancellationError {
-                    continuation.finish()
-                } catch let error as URLError where error.code == .cancelled {
-                    continuation.finish()
-                } catch {
-                    continuation.finish(throwing: HermesAPIError.from(error))
-                }
-            }
-            continuation.onTermination = { _ in task.cancel() }
-        }
     }
 
     /// Sends one message to a session stored on the instance and streams the reply events, in order.
@@ -160,57 +117,6 @@ public struct HermesClient: Sendable {
         }
         emit(event)
         return false
-    }
-
-    /// Parses the byte stream and calls `emit` for each non-empty `delta.content`, until `[DONE]`.
-    private static func forEachDelta<Bytes: AsyncSequence>(
-        in bytes: Bytes,
-        _ emit: (String) -> Void
-    ) async throws where Bytes.Element == UInt8 {
-        var parser = SSEParser()
-        for try await byte in bytes {
-            for event in parser.feed(CollectionOfOne(byte)) {
-                if try handle(event, emit) { return }
-            }
-        }
-        for event in parser.finish() {
-            if try handle(event, emit) { return }
-        }
-    }
-
-    /// Returns `true` once the stream is complete (`[DONE]`).
-    private static func handle(_ event: SSEEvent, _ emit: (String) -> Void) throws -> Bool {
-        switch event {
-        case .done:
-            return true
-        case .data(let payload):
-            let chunk = try JSONDecoder().decode(ChatChunk.self, from: Data(payload.utf8))
-            if let delta = chunk.contentDelta, !delta.isEmpty {
-                emit(delta)
-            }
-            return false
-        }
-    }
-
-    /// Sends the conversation without streaming and returns the text of the first choice.
-    public func chat(model: String, provider: String? = nil, messages: [ChatMessage]) async throws -> String {
-        do {
-            let request = try makeRequest(model: model, provider: provider, messages: messages, stream: false)
-            let (data, response) = try await session.data(for: request)
-            try Self.validate(response, requestURL: request.url)
-
-            let completion = try JSONDecoder().decode(ChatCompletion.self, from: data)
-            guard let content = completion.choices.first?.message.content else {
-                throw HermesAPIError.invalidResponse
-            }
-            return content
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch let error as URLError where error.code == .cancelled {
-            throw CancellationError()
-        } catch {
-            throw HermesAPIError.from(error)
-        }
     }
 
     /// Checks that the instance answers at `HermesAPIPaths.health`.
@@ -447,19 +353,6 @@ public struct HermesClient: Sendable {
         } catch {
             return .fallback(HermesAPIError.from(error))
         }
-    }
-
-    /// Builds `POST {baseURL}/v1/chat/completions`. Internal for tests.
-    func makeRequest(model: String, provider: String? = nil, messages: [ChatMessage], stream: Bool) throws -> URLRequest {
-        var request = makeRequest(
-            method: "POST",
-            path: HermesAPIPaths.chatCompletions,
-            accept: stream ? "text/event-stream" : "application/json"
-        )
-        request.httpBody = try JSONEncoder().encode(
-            ChatRequest(model: model, provider: provider, messages: messages, stream: stream)
-        )
-        return request
     }
 
     /// Builds an authenticated request to `{baseURL}{path}`, with the Bearer header and the client timeout.

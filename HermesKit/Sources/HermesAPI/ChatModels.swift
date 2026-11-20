@@ -18,14 +18,12 @@ public struct ImageAttachment: Sendable, Equatable {
     }
 }
 
-/// A message in a conversation. `role` stays a `String` so that roles unknown to the instance still decode.
-///
-/// Text-only messages are encoded with `content` as a plain string. A message with images is encoded
-/// with `content` as an array of `text` and `image_url` parts, the OpenAI vision shape.
-/// Decoding reads a string `content` only and never produces images.
-public struct ChatMessage: Codable, Sendable, Equatable {
+/// A message as a conversation screen shows it. `role` stays a `String` so that roles unknown to the
+/// instance are kept.
+public struct ChatMessage: Sendable, Equatable {
     public var role: String
     public var content: String
+    /// Images sent with the message from this device, shown as thumbnails.
     public var images: [ImageAttachment]
 
     public init(role: String, content: String, images: [ImageAttachment] = []) {
@@ -33,36 +31,8 @@ public struct ChatMessage: Codable, Sendable, Equatable {
         self.content = content
         self.images = images
     }
-
-    private enum CodingKeys: String, CodingKey {
-        case role
-        case content
-    }
-
-    public init(from decoder: any Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        role = try container.decode(String.self, forKey: .role)
-        content = try container.decode(String.self, forKey: .content)
-        images = []
-    }
-
-    public func encode(to encoder: any Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(role, forKey: .role)
-        if images.isEmpty {
-            try container.encode(content, forKey: .content)
-        } else {
-            var parts: [ContentPart] = []
-            if !content.isEmpty {
-                parts.append(ContentPart(type: "text", text: content))
-            }
-            parts += images.map { ContentPart(type: "image_url", imageURL: ImageURLPart(url: $0.dataURL)) }
-            try container.encode(parts, forKey: .content)
-        }
-    }
 }
 
-/// One element of a multimodal `content` array.
 /// The `content` of a user message sent to the instance.
 ///
 /// Text alone is encoded as a plain string. With images, it is an array of `text` and `image_url`
@@ -101,100 +71,4 @@ private struct ContentPart: Encodable {
 
 private struct ImageURLPart: Encodable {
     let url: String
-}
-
-/// Body of `POST /v1/chat/completions`. Encodes `model`, `messages`, `stream`, and `provider` when set.
-///
-/// The instance ignores a `model` sent without a `provider` (unless its `direct_model_requests` option is on):
-/// to talk to a provider model such as an Anthropic or OpenAI one, both must be sent.
-public struct ChatRequest: Encodable, Sendable, Equatable {
-    public var model: String
-    /// Provider slug from `GET /api/model/options` (for example `anthropic`). `nil` is not encoded.
-    public var provider: String?
-    public var messages: [ChatMessage]
-    public var stream: Bool
-
-    public init(model: String, provider: String? = nil, messages: [ChatMessage], stream: Bool) {
-        self.model = model
-        self.provider = provider
-        self.messages = messages
-        self.stream = stream
-    }
-}
-
-/// Non-streamed response. Unknown fields are ignored when decoding.
-public struct ChatCompletion: Codable, Sendable, Equatable {
-    public var id: String?
-    public var model: String
-    public var choices: [Choice]
-
-    public init(id: String?, model: String, choices: [Choice]) {
-        self.id = id
-        self.model = model
-        self.choices = choices
-    }
-
-    public struct Choice: Codable, Sendable, Equatable {
-        public var index: Int
-        public var message: ChatMessage
-        public var finishReason: String?
-
-        public init(index: Int, message: ChatMessage, finishReason: String?) {
-            self.index = index
-            self.message = message
-            self.finishReason = finishReason
-        }
-
-        private enum CodingKeys: String, CodingKey {
-            case index
-            case message
-            case finishReason = "finish_reason"
-        }
-    }
-}
-
-/// A chunk of an SSE stream (`data: {...}`). Unknown fields are ignored when decoding.
-public struct ChatChunk: Codable, Sendable, Equatable {
-    public var id: String?
-    public var model: String?
-    public var choices: [Choice]
-
-    public init(id: String?, model: String?, choices: [Choice]) {
-        self.id = id
-        self.model = model
-        self.choices = choices
-    }
-
-    /// Text added by this chunk, or `nil` if the chunk carries none.
-    public var contentDelta: String? {
-        choices.first?.delta.content
-    }
-
-    public struct Choice: Codable, Sendable, Equatable {
-        public var index: Int
-        public var delta: Delta
-        public var finishReason: String?
-
-        public init(index: Int, delta: Delta, finishReason: String?) {
-            self.index = index
-            self.delta = delta
-            self.finishReason = finishReason
-        }
-
-        private enum CodingKeys: String, CodingKey {
-            case index
-            case delta
-            case finishReason = "finish_reason"
-        }
-    }
-
-    public struct Delta: Codable, Sendable, Equatable {
-        public var role: String?
-        public var content: String?
-
-        public init(role: String?, content: String?) {
-            self.role = role
-            self.content = content
-        }
-    }
 }
