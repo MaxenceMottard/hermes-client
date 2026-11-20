@@ -6,5 +6,8 @@ struct HermesApp: App {
         WindowGroup {
             ContentView()
         }
+        .commands {
+            ChatMenuCommands()
+        }
     }
 }
