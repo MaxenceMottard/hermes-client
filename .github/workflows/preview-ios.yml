@@ -1,14 +1,14 @@
 name: Preview iOS
 
 # Builds an ad hoc signed IPA and the iOS Simulator, in parallel jobs, and shares both as Tuist Previews when
-# the `preview-device` label is added to an open pull request. The IPA installs on the devices registered in the Apple Developer account. It needs the
+# the `preview-ios` label is added to an open pull request. The IPA installs on the devices registered in the Apple Developer account. It needs the
 # App Store Connect API key secrets. The label is removed as soon as the run starts: add it again to rebuild.
 on:
   pull_request:
     types: [labeled]
 
 concurrency:
-  group: preview-device-${{ github.event.pull_request.number }}
+  group: preview-ios-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 permissions:
@@ -23,7 +23,7 @@ env:
 jobs:
   preview:
     name: Device preview
-    if: github.event.label.name == 'preview-device' && github.event.pull_request.state == 'open'
+    if: github.event.label.name == 'preview-ios' && github.event.pull_request.state == 'open'
     runs-on: xcode-27
     timeout-minutes: 60
     env:
@@ -36,13 +36,13 @@ jobs:
       APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
       BUILD_NUMBER: ${{ github.run_number }}.${{ github.run_attempt }}
     steps:
-      - name: Remove the preview-device label
+      - name: Remove the preview-ios label
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh pr edit "${{ github.event.pull_request.number }}" \
             --repo "${{ github.repository }}" \
-            --remove-label preview-device
+            --remove-label preview-ios
       - name: Check the App Store Connect secrets
         run: |
           if [ -z "$APP_STORE_CONNECT_API_KEY_BASE64" ]; then
@@ -111,7 +111,7 @@ jobs:
 
   simulator:
     name: iOS Simulator preview
-    if: github.event.label.name == 'preview-device' && github.event.pull_request.state == 'open'
+    if: github.event.label.name == 'preview-ios' && github.event.pull_request.state == 'open'
     runs-on: xcode-27
     timeout-minutes: 45
     env:
