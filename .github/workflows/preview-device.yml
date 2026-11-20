@@ -1,7 +1,7 @@
 name: Preview device
 
-# Builds an ad hoc signed IPA and shares it as a Tuist Preview when the `preview-device` label is added to an
-# open pull request. The IPA installs on the devices registered in the Apple Developer account. It needs the
+# Builds an ad hoc signed IPA and the iOS Simulator, in parallel jobs, and shares both as Tuist Previews when
+# the `preview-device` label is added to an open pull request. The IPA installs on the devices registered in the Apple Developer account. It needs the
 # App Store Connect API key secrets. The label is removed as soon as the run starts: add it again to rebuild.
 on:
   pull_request:
@@ -108,3 +108,33 @@ jobs:
       - name: Remove App Store Connect API key
         if: always()
         run: rm -f "${{ steps.api-key.outputs.path }}"
+
+  simulator:
+    name: iOS Simulator preview
+    if: github.event.label.name == 'preview-device' && github.event.pull_request.state == 'open'
+    runs-on: xcode-27
+    timeout-minutes: 45
+    env:
+      BUILD_NUMBER: ${{ github.run_number }}.${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+        with:
+          install: true
+          cache: true
+      - name: Authenticate with Tuist
+        run: tuist auth login
+      - name: Generate Tuist project
+        run: |
+          tuist install
+          tuist generate --no-open
+      - name: Build for the iOS Simulator
+        run: |
+          tuist xcodebuild build \
+            -workspace Hermes.xcworkspace \
+            -scheme Hermes \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
+      - name: Share simulator preview
+        run: tuist share Hermes --configuration Debug --platforms ios
