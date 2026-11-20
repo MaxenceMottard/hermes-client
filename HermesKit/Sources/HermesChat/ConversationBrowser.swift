@@ -43,6 +43,13 @@ public final class ConversationBrowser {
     /// without a model. `hermes-agent` (the default) lets the instance pick.
     private let model: String
     private let lastModel: (any LastModelStorage)?
+    /// Local conversations left while a reply was streaming, by conversation id. The reply keeps running in
+    /// its session, so opening the conversation again shows that session instead of a copy read from the
+    /// store, which would miss everything received after it was read.
+    private var liveSessions: [UUID: ChatSession] = [:]
+    /// Remote sessions left while a reply was streaming, for the same reason. The reply exists only in the
+    /// transcript that sent the message: the instance offers no way to attach to a turn already running.
+    private var liveTranscripts: [RemoteTranscript] = []
 
     /// Loads the conversations and opens the most recent one. Creates a conversation if there is none.
     /// With a `lastModel` storage, new conversations start on the model chosen last time.
@@ -104,29 +111,62 @@ public final class ConversationBrowser {
 
     /// Opens a conversation. Selecting the open one again keeps its session, including a reply in progress.
     /// Opening a local conversation closes the remote session shown in the detail pane.
+    /// A conversation left while its reply was streaming opens on the same session, with the reply still
+    /// arriving.
     public func select(_ id: UUID?) {
         if id != nil {
-            openedRemote = nil
+            closeRemote()
         }
         guard id != selectedID else { return }
+        keepSessionIfLive()
         guard let id, (try? store.conversation(id: id)) != nil else {
             selectedID = nil
             session = nil
             return
         }
         selectedID = id
-        session = ChatSession(service: service, model: model, store: store, conversationID: id)
+        session = liveSessions.removeValue(forKey: id)
+            ?? ChatSession(service: service, model: model, store: store, conversationID: id)
+    }
+
+    /// Keeps the open local session if a reply is streaming in it, and drops kept sessions whose reply
+    /// ended: the store holds all of their messages.
+    private func keepSessionIfLive() {
+        if let session, let selectedID, session.isBusy {
+            liveSessions[selectedID] = session
+        }
+        liveSessions = liveSessions.filter { $0.value.isBusy }
+    }
+
+    /// Closes the remote session in the detail pane. It is kept if a reply is streaming in it; kept
+    /// transcripts whose reply ended are dropped, the instance holds all of their messages.
+    private func closeRemote() {
+        if let openedRemote, openedRemote.isSending, !liveTranscripts.contains(where: { $0 === openedRemote }) {
+            liveTranscripts.append(openedRemote)
+        }
+        openedRemote = nil
+        liveTranscripts.removeAll { !$0.isSending }
     }
 
     /// Opens a session stored on the Hermes instance in the detail pane, in place of the local conversation.
     /// Does nothing when no instance is configured. A reply still running in a local conversation keeps running.
+    /// A session left while its reply was streaming opens on the same transcript, with the reply still arriving.
     public func openRemote(_ session: RemoteSession) {
         guard let remoteSessions else { return }
+        keepSessionIfLive()
         selectedID = nil
         self.session = nil
         // Selecting the open one again keeps its transcript, including a reply in progress. After a fork the
         // sidebar row carries the fork's id, which is the transcript's active session.
         guard openedRemote?.sessionID != session.id, openedRemote?.activeSessionID != session.id else { return }
+        closeRemote()
+        if let index = liveTranscripts.firstIndex(where: {
+            $0.sessionID == session.id || $0.activeSessionID == session.id
+        }) {
+            // Not loaded again: the page would replace the lines, the reply being streamed included.
+            openedRemote = liveTranscripts.remove(at: index)
+            return
+        }
         let transcript = remoteSessions.transcript(for: session)
         openedRemote = transcript
         // Loaded from here, not only from the view: on iOS 27 the detail view of a collapsed split view
@@ -148,7 +188,7 @@ public final class ConversationBrowser {
     /// as when the navigation stack goes back to the list. An unknown id is ignored.
     public func selectEntry(_ entryID: String?) {
         guard let entryID else {
-            openedRemote = nil
+            closeRemote()
             select(nil)
             return
         }
@@ -166,6 +206,7 @@ public final class ConversationBrowser {
         if wasSelected {
             session?.stop()
         }
+        liveSessions.removeValue(forKey: id)?.stop()
         try store.deleteConversation(id: id)
         refresh()
         if wasSelected {
