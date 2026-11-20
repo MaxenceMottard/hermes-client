@@ -21,6 +21,10 @@ struct ChatComposer: View {
     let onSend: () -> Void
     let onStop: () -> Void
 
+    /// Height of the action row: the model capsule, and the diameter of the round buttons beside it.
+    /// It is the capsule's natural height (subheadline text plus 10 pt above and below) and follows Dynamic Type.
+    @ScaledMetric(relativeTo: .subheadline) private var controlHeight: CGFloat = 38
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             if !pendingImages.isEmpty {
@@ -44,33 +48,22 @@ struct ChatComposer: View {
 
             HStack(spacing: 10) {
                 if let onAdd {
-                    Button("Add images", systemImage: "plus", action: onAdd)
-                        .labelStyle(.iconOnly)
-                        .buttonStyle(.glass)
-                        .buttonBorderShape(.circle)
-                        .controlSize(.large)
+                    ComposerCircleButton("Add images", systemImage: "plus", size: controlHeight, action: onAdd)
                         .disabled(isBusy)
                 }
 
                 if let model {
-                    ModelBadge(model: model)
+                    ModelBadge(model: model, height: controlHeight)
                 }
 
                 Spacer(minLength: 0)
 
                 if isBusy {
-                    Button("Stop", systemImage: "stop.fill", action: onStop)
-                        .labelStyle(.iconOnly)
-                        .buttonStyle(.glassProminent)
-                        .buttonBorderShape(.circle)
-                        .controlSize(.large)
+                    ComposerCircleButton(
+                        "Stop", systemImage: "stop.fill", size: controlHeight, prominent: true, action: onStop)
                 } else {
-                    Button("Send", systemImage: "arrow.up", action: onSend)
-                        .labelStyle(.iconOnly)
-                        .fontWeight(.semibold)
-                        .buttonStyle(.glassProminent)
-                        .buttonBorderShape(.circle)
-                        .controlSize(.large)
+                    ComposerCircleButton(
+                        "Send", systemImage: "arrow.up", size: controlHeight, prominent: true, action: onSend)
                         .disabled(!canSend)
                 }
             }
@@ -86,6 +79,7 @@ struct ChatComposer: View {
 /// The model is fixed when a conversation starts, so the badge is not a button.
 private struct ModelBadge: View {
     let model: ModelChoice
+    let height: CGFloat
 
     var body: some View {
         HStack(spacing: 5) {
@@ -99,10 +93,44 @@ private struct ModelBadge: View {
         .lineLimit(1)
         .truncationMode(.middle)
         .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .frame(height: height)
         .glassEffect(.regular, in: .capsule)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Model: \(model.displayName)")
+    }
+}
+
+/// A round icon button of the composer's action row, `size` points wide and high. `prominent` fills it
+/// with the accent color (send, stop).
+private struct ComposerCircleButton: View {
+    let title: String
+    let systemImage: String
+    let size: CGFloat
+    let prominent: Bool
+    let action: () -> Void
+
+    @Environment(\.isEnabled) private var isEnabled
+
+    init(_ title: String, systemImage: String, size: CGFloat, prominent: Bool = false, action: @escaping () -> Void) {
+        self.title = title
+        self.systemImage = systemImage
+        self.size = size
+        self.prominent = prominent
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: size * 0.42, weight: .semibold))
+                .foregroundStyle(prominent ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
+                .frame(width: size, height: size)
+                .contentShape(.circle)
+        }
+        .buttonStyle(.plain)
+        .glassEffect(prominent ? .regular.tint(.accentColor).interactive() : .regular.interactive(), in: .circle)
+        .opacity(isEnabled ? 1 : 0.4)
+        .accessibilityLabel(title)
     }
 }
 
