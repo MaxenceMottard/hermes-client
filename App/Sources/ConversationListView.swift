@@ -4,8 +4,8 @@ import HermesStore
 import SwiftUI
 
 /// Sidebar: one list of the conversations on this device and the sessions on the Hermes instance,
-/// most recently used first. Local conversations show their model, open, and can be renamed or deleted.
-/// A remote session opens read-only in the detail pane.
+/// most recently used first, one line per entry (an icon for its kind and the title). Local
+/// conversations open and can be renamed or deleted. A remote session opens read-only in the detail pane.
 struct ConversationListView: View {
     let browser: ConversationBrowser
 
@@ -14,16 +14,21 @@ struct ConversationListView: View {
 
     var body: some View {
         List(selection: selection) {
-            ForEach(entries) { entry in
-                switch entry {
-                case .local(let summary):
-                    localRow(summary)
-                case .remote(let session):
-                    remoteRow(session)
+            if !entries.isEmpty {
+                Section("Recents") {
+                    ForEach(entries) { entry in
+                        switch entry {
+                        case .local(let summary):
+                            localRow(summary, entry: entry)
+                        case .remote:
+                            rowLabel(entry)
+                        }
+                    }
                 }
             }
             if let remote = browser.remoteSessions {
                 RemoteStatusRows(list: remote)
+                    .listRowSeparator(.hidden)
             }
         }
         .task {
@@ -53,54 +58,42 @@ struct ConversationListView: View {
         )
     }
 
-    private func localRow(_ summary: ConversationSummary) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(summary.title)
-                .lineLimit(1)
-            HStack(spacing: 4) {
-                if let model = summary.model {
-                    Text(ModelChoice.displayName(model: model, provider: summary.provider))
-                        .lineLimit(1)
-                    Text("·")
-                }
-                Text(summary.updatedAt, style: .relative)
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        }
-        .tag(SidebarEntry.localID(summary.id))
-        .contextMenu {
-            Button("Rename", systemImage: "pencil") {
-                draftTitle = summary.title
-                renamingID = summary.id
-            }
-            Button("Delete", systemImage: "trash", role: .destructive) {
-                try? browser.delete(summary.id)
-            }
-        }
-        .swipeActions(edge: .trailing) {
-            Button("Delete", systemImage: "trash", role: .destructive) {
-                try? browser.delete(summary.id)
-            }
-            Button("Rename", systemImage: "pencil") {
-                draftTitle = summary.title
-                renamingID = summary.id
-            }
-            .tint(.indigo)
+    /// One line: the icon of the entry kind and its title, truncated at the end.
+    private func rowLabel(_ entry: SidebarEntry) -> some View {
+        Label(entry.title, systemImage: Self.icon(for: entry.kind))
+            .lineLimit(1)
+            .tag(entry.id)
+            .listRowSeparator(.hidden)
+    }
+
+    private static func icon(for kind: SidebarEntry.Kind) -> String {
+        switch kind {
+        case .chat: "bubble.left"
+        case .scheduled: "clock"
         }
     }
 
-    private func remoteRow(_ session: RemoteSession) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(session.title ?? "Untitled session")
-                .lineLimit(1)
-            if let lastActive = session.lastActive {
-                Text(lastActive, style: .relative)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+    private func localRow(_ summary: ConversationSummary, entry: SidebarEntry) -> some View {
+        rowLabel(entry)
+            .contextMenu {
+                Button("Rename", systemImage: "pencil") {
+                    draftTitle = summary.title
+                    renamingID = summary.id
+                }
+                Button("Delete", systemImage: "trash", role: .destructive) {
+                    try? browser.delete(summary.id)
+                }
             }
-        }
-        .tag(SidebarEntry.remoteID(session.id))
+            .swipeActions(edge: .trailing) {
+                Button("Delete", systemImage: "trash", role: .destructive) {
+                    try? browser.delete(summary.id)
+                }
+                Button("Rename", systemImage: "pencil") {
+                    draftTitle = summary.title
+                    renamingID = summary.id
+                }
+                .tint(.indigo)
+            }
     }
 
     /// One selection for local and remote rows. On compact widths the split view collapses into a
