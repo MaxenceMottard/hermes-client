@@ -9,6 +9,7 @@ import HermesAPI
 public protocol SessionListing: Sendable {
     func listSessions(limit: Int, offset: Int) async throws -> SessionPage
     func listSessionMessages(sessionID: String, limit: Int, offset: Int) async throws -> SessionMessagesPage
+    func streamSessionChat(sessionID: String, message: String) async -> AsyncThrowingStream<SessionChatEvent, any Error>
 }
 
 extension HermesClient: SessionListing {}

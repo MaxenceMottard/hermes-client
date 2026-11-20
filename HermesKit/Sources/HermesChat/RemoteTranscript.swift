@@ -20,11 +20,14 @@ public struct TranscriptLine: Identifiable, Equatable, Sendable {
     }
 }
 
-/// The messages of a session stored on the Hermes instance, read-only.
+/// The messages of a session stored on the Hermes instance, and a way to continue it.
 ///
 /// Only user and assistant messages with text are kept. Tool, system and compaction rows, and rows the
 /// instance marks as hidden, are dropped. Pages are requested with an offset counted in received
 /// messages, not in displayed lines.
+///
+/// `send(_:)` posts a message to the session and shows the reply as it streams. Its lines live only in
+/// this object until the transcript is loaded again.
 ///
 /// `@Observable` is applied on Apple platforms, see `ChatSession` for why it is left out on Linux.
 @MainActor
@@ -47,10 +50,15 @@ public final class RemoteTranscript: Identifiable {
     public private(set) var lines: [TranscriptLine] = []
     public private(set) var state: State = .idle
     public private(set) var hasMore = false
+    /// `true` while a reply is streaming.
+    public private(set) var isSending = false
+    /// Why the last message got no reply, or `nil`.
+    public private(set) var sendError: String?
 
     private let source: any SessionListing
     /// Messages received so far, displayed or not: the offset of the next page.
     private var received = 0
+    private var sendTask: Task<Void, Never>?
 
     public init(sessionID: String, title: String?, source: any SessionListing) {
         self.sessionID = sessionID
@@ -108,5 +116,60 @@ public final class RemoteTranscript: Identifiable {
         } catch {
             state = .failed(HermesAPIError.from(error))
         }
+    }
+
+    /// Sends a message to the session and shows the reply as it streams. The user line appears at once.
+    /// Blank text is ignored, and so is a call made while a reply is still streaming.
+    public func send(_ text: String) async {
+        let message = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !message.isEmpty, !isSending else { return }
+        isSending = true
+        sendError = nil
+        lines.append(TranscriptLine(id: "local-user-\(UUID().uuidString)", role: "user", text: message, date: Date()))
+        let replyID = "local-assistant-\(UUID().uuidString)"
+        lines.append(TranscriptLine(id: replyID, role: "assistant", text: "", date: nil))
+
+        let task = Task { await self.stream(message, replyID: replyID) }
+        sendTask = task
+        await task.value
+        sendTask = nil
+        isSending = false
+    }
+
+    /// Stops the reply being streamed. The text received so far stays in the transcript.
+    public func stop() {
+        sendTask?.cancel()
+    }
+
+    private func stream(_ message: String, replyID: String) async {
+        do {
+            for try await event in await source.streamSessionChat(sessionID: sessionID, message: message) {
+                switch event {
+                case .delta(let delta):
+                    setReply(id: replyID) { $0 + delta }
+                case .completed(let content):
+                    if !content.isEmpty {
+                        setReply(id: replyID) { _ in content }
+                    }
+                case .failed(let reason):
+                    sendError = reason
+                case .finished:
+                    break
+                }
+            }
+        } catch is CancellationError {
+            // Stopped by the user: keep what was received.
+        } catch {
+            sendError = HermesAPIError.from(error).errorDescription ?? "The message could not be sent."
+        }
+        if let index = lines.firstIndex(where: { $0.id == replyID }), lines[index].text.isEmpty {
+            lines.remove(at: index)
+        }
+    }
+
+    private func setReply(id: String, _ update: (String) -> String) {
+        guard let index = lines.firstIndex(where: { $0.id == id }) else { return }
+        let line = lines[index]
+        lines[index] = TranscriptLine(id: line.id, role: line.role, text: update(line.text), date: line.date)
     }
 }

@@ -22,6 +22,10 @@ actor FakeMessageSource: SessionListing {
         guard !pages.isEmpty else { return SessionMessagesPage(sessionID: sessionID, messages: [], hasMore: false) }
         return try pages.removeFirst().get()
     }
+
+    func streamSessionChat(sessionID: String, message: String) -> AsyncThrowingStream<SessionChatEvent, any Error> {
+        AsyncThrowingStream { $0.finish() }
+    }
 }
 
 @MainActor

@@ -22,6 +22,10 @@ actor FakeSessionSource: SessionListing {
     func listSessionMessages(sessionID: String, limit: Int, offset: Int) async throws -> SessionMessagesPage {
         throw HermesAPIError.notFound
     }
+
+    func streamSessionChat(sessionID: String, message: String) -> AsyncThrowingStream<SessionChatEvent, any Error> {
+        AsyncThrowingStream { $0.finish() }
+    }
 }
 
 @MainActor

@@ -3,9 +3,11 @@ import HermesChat
 import SwiftUI
 
 /// A session stored on the Hermes instance, shown in the detail pane with the same message rows as a
-/// local conversation. Read-only: continuing the session is not available yet.
+/// local conversation. Messages can be sent: the reply streams in from the instance. Text only for now.
 struct RemoteChatView: View {
     let transcript: RemoteTranscript
+
+    @State private var draft = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -18,11 +20,43 @@ struct RemoteChatView: View {
                 }
                 .padding()
             }
-            Text("Read-only: continuing this session on the instance is not available yet.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding()
+
+            if transcript.isSending {
+                ProgressView()
+                    .padding(.bottom, 4)
+            }
+
+            if let error = transcript.sendError {
+                Text(error)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+            }
+
+            HStack(alignment: .bottom, spacing: 8) {
+                TextField("Message", text: $draft, axis: .vertical)
+                    .textFieldStyle(.roundedBorder)
+                    .lineLimit(1 ... 5)
+
+                if transcript.isSending {
+                    Button("Stop", systemImage: "stop.circle.fill") {
+                        transcript.stop()
+                    }
+                    .labelStyle(.iconOnly)
+                    .font(.title2)
+                } else {
+                    Button("Send", systemImage: "arrow.up.circle.fill") {
+                        let text = draft
+                        draft = ""
+                        Task { await transcript.send(text) }
+                    }
+                    .labelStyle(.iconOnly)
+                    .font(.title2)
+                    .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .padding()
         }
         .navigationTitle(transcript.title ?? "Untitled session")
         .inlineNavigationTitle()

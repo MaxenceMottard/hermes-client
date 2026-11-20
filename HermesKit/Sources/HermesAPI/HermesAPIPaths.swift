@@ -21,4 +21,9 @@ public enum HermesAPIPaths {
     public static func sessionMessages(_ sessionID: String) -> String {
         "\(sessions)/\(sessionID)/messages"
     }
+
+    /// Chat stream of one session, `POST /api/sessions/{id}/chat/stream` (server-sent events).
+    public static func sessionChatStream(_ sessionID: String) -> String {
+        "\(sessions)/\(sessionID)/chat/stream"
+    }
 }

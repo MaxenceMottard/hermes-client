@@ -77,6 +77,81 @@ public struct HermesClient: Sendable {
         }
     }
 
+    /// Sends one text message to a session stored on the instance and streams the reply events, in order.
+    ///
+    /// `POST {baseURL}/api/sessions/{id}/chat/stream`. The stream finishes on `done` or at the end of the
+    /// response. Cancelling the consuming task, or leaving the loop, cancels the request. The request is
+    /// never retried automatically.
+    public func streamSessionChat(sessionID: String, message: String) -> AsyncThrowingStream<SessionChatEvent, any Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    // The id goes into the path as is: it must be a single segment.
+                    guard !sessionID.isEmpty, !sessionID.contains("/") else {
+                        throw HermesAPIError.invalidResponse
+                    }
+                    var request = makeRequest(
+                        method: "POST",
+                        path: HermesAPIPaths.sessionChatStream(sessionID),
+                        accept: "text/event-stream"
+                    )
+                    request.httpBody = try JSONEncoder().encode(SessionChatRequest(message: message))
+                    #if canImport(Darwin)
+                        let (bytes, response) = try await session.bytes(for: request)
+                        try Self.validate(response, requestURL: request.url)
+                        try await Self.forEachSessionEvent(in: bytes) { continuation.yield($0) }
+                    #else
+                        // Linux (tests only): URLSession.bytes is unavailable, so the body is buffered.
+                        let (data, response) = try await session.data(for: request)
+                        try Self.validate(response, requestURL: request.url)
+                        let bytes = AsyncThrowingStream<UInt8, any Error> { source in
+                            for byte in data {
+                                source.yield(byte)
+                            }
+                            source.finish()
+                        }
+                        try await Self.forEachSessionEvent(in: bytes) { continuation.yield($0) }
+                    #endif
+                    continuation.finish()
+                } catch is CancellationError {
+                    continuation.finish()
+                } catch let error as URLError where error.code == .cancelled {
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: HermesAPIError.from(error))
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    /// Parses the named events of a session chat stream and emits each one that a transcript shows,
+    /// until `done`.
+    private static func forEachSessionEvent<Bytes: AsyncSequence>(
+        in bytes: Bytes,
+        _ emit: (SessionChatEvent) -> Void
+    ) async throws where Bytes.Element == UInt8 {
+        var parser = SessionEventParser()
+        for try await byte in bytes {
+            for frame in parser.feed(CollectionOfOne(byte)) {
+                if emitSessionEvent(frame, emit) { return }
+            }
+        }
+        for frame in parser.finish() {
+            if emitSessionEvent(frame, emit) { return }
+        }
+    }
+
+    /// Returns `true` once the stream is complete (`done`).
+    private static func emitSessionEvent(_ frame: SessionEventFrame, _ emit: (SessionChatEvent) -> Void) -> Bool {
+        guard let event = SessionChatEvent(frame) else { return false }
+        if event == .finished {
+            return true
+        }
+        emit(event)
+        return false
+    }
+
     /// Parses the byte stream and calls `emit` for each non-empty `delta.content`, until `[DONE]`.
     private static func forEachDelta<Bytes: AsyncSequence>(
         in bytes: Bytes,

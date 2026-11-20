@@ -21,10 +21,12 @@ struct SessionsReply: Sendable {
 final class SessionsURLProtocol: URLProtocol {
     nonisolated(unsafe) static var responder: (@Sendable (URLRequest) -> SessionsReply)?
     nonisolated(unsafe) static var requests: [URLRequest] = []
+    nonisolated(unsafe) static var bodies: [Data] = []
 
     static func reset() {
         responder = nil
         requests = []
+        bodies = []
     }
 
     override class func canInit(with request: URLRequest) -> Bool { true }
@@ -32,6 +34,7 @@ final class SessionsURLProtocol: URLProtocol {
 
     override func startLoading() {
         Self.requests.append(request)
+        Self.bodies.append(request.httpBody ?? Data())
         let reply = Self.responder?(request) ?? SessionsReply(status: 500)
         if let failure = reply.failure {
             client?.urlProtocol(self, didFailWithError: failure)
