@@ -1,13 +1,13 @@
 import HermesChat
 import SwiftUI
 
-/// Connection settings: instance URL, model name, and API key. Shown on first launch and from the chat screen.
+/// Connection settings: instance URL and API key. Shown on first launch and from the chat screen.
+/// The model is picked per conversation, in `NewConversationView`.
 struct SettingsView: View {
     let appState: AppState
     @Environment(\.dismiss) private var dismiss
 
     @State private var baseURL: String
-    @State private var model: String
     @State private var apiKey: String
     @State private var errorMessage: String?
     @State private var isTesting = false
@@ -16,7 +16,6 @@ struct SettingsView: View {
     init(appState: AppState) {
         self.appState = appState
         _baseURL = State(initialValue: appState.settings?.baseURLString ?? "")
-        _model = State(initialValue: appState.settings?.model ?? "hermes-agent")
         _apiKey = State(initialValue: appState.apiKey ?? "")
     }
 
@@ -27,13 +26,10 @@ struct SettingsView: View {
                     TextField("https://hermes.example.test", text: $baseURL)
                         .urlEntry()
                         .autocorrectionDisabled()
-                    TextField("Model name", text: $model)
-                        .noAutocapitalization()
-                        .autocorrectionDisabled()
                 } header: {
                     Text("Instance")
                 } footer: {
-                    Text("The base URL of your Hermes instance and the model name it exposes.")
+                    Text("The base URL of your Hermes instance. The model is chosen for each new conversation.")
                 }
 
                 Section {
@@ -95,11 +91,10 @@ struct SettingsView: View {
 
     private func save() {
         let settings = ConnectionSettings(
-            baseURLString: baseURL.trimmingCharacters(in: .whitespacesAndNewlines),
-            model: model.trimmingCharacters(in: .whitespacesAndNewlines)
+            baseURLString: baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         )
         guard settings.isValid else {
-            errorMessage = "Enter an http or https URL and a model name."
+            errorMessage = "Enter an http or https URL."
             return
         }
         do {

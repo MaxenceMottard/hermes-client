@@ -67,7 +67,6 @@ final class AppState {
         browser = ConversationBrowser(
             store: store,
             service: client,
-            model: settings.model,
             remoteSessions: RemoteSessionList(source: client),
             lastModel: UserDefaultsLastModelStorage()
         )

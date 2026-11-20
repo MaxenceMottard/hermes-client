@@ -116,6 +116,14 @@ struct ConversationModelTests {
         #expect(try store.conversation(id: blankProvider)?.provider == nil)
     }
 
+    @Test("without a model, the browser defaults to the instance's hermes-agent")
+    func defaultsToInstanceModel() {
+        let browser = ConversationBrowser(store: InMemoryConversationStore(), service: FakeChatService(scripts: []))
+
+        #expect(browser.defaultChoice == ModelChoice.instanceDefault)
+        #expect(browser.session?.modelChoice == ModelChoice(model: "hermes-agent"))
+    }
+
     @Test("the display name shows the provider before the model")
     func displayName() {
         #expect(ModelChoice(model: "opus", provider: "anthropic").displayName == "anthropic · opus")
