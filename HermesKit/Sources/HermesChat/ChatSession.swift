@@ -31,6 +31,9 @@ public final class ChatSession {
     /// Number of streamed deltas between two saves while a reply is arriving.
     static let saveInterval = 20
 
+    /// Maximum number of images sent with one message.
+    public static let maxImagesPerMessage = 4
+
     public private(set) var messages: [ChatMessage] = []
     public private(set) var phase: Phase = .idle
 
@@ -73,12 +76,17 @@ public final class ChatSession {
     }
 
     /// Appends the user message, then streams the reply into a new assistant message.
-    /// Blank input and sends issued while a reply is pending are ignored.
-    public func send(_ text: String) async {
+    /// A message needs text, images, or both. Empty input, more than `maxImagesPerMessage` images, and sends
+    /// issued while a reply is pending are ignored.
+    ///
+    /// Images are kept in memory for the session. They are not saved with the conversation, so after a
+    /// reload the earlier messages are sent to the instance as text only.
+    public func send(_ text: String, images: [ImageAttachment] = []) async {
         let content = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !content.isEmpty, !isBusy else { return }
-        messages.append(ChatMessage(role: "user", content: content))
-        titleIfUntitled(from: content)
+        guard !(content.isEmpty && images.isEmpty), !isBusy else { return }
+        guard images.count <= Self.maxImagesPerMessage else { return }
+        messages.append(ChatMessage(role: "user", content: content, images: images))
+        titleIfUntitled(from: content.isEmpty ? "Image" : content)
         persist()
         await runReply()
     }
