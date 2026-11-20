@@ -175,3 +175,12 @@ jobs:
             MARKETING_VERSION="$MARKETING_VERSION_PREVIEW"
       - name: Share simulator preview
         run: tuist share Hermes --configuration Debug --platforms ios
+      - name: Dump Tuist session logs
+        if: always()
+        run: |
+          # Temporary debug step: Tuist keeps the upload error only in its session logs.
+          find "$HOME/.local/state/tuist/sessions" -name logs.txt 2>/dev/null | while read -r f; do
+            echo "::group::$f"
+            grep -iE "error|fail|upload|reject|duplicate|status|http" "$f" | tail -200 || true
+            echo "::endgroup::"
+          done
