@@ -44,6 +44,7 @@ let project = Project(
                 "CFBundleDisplayName": "Hermes",
                 "CFBundleVersion": "$(CURRENT_PROJECT_VERSION)",
                 "UILaunchScreen": [:],
+                "NSCameraUsageDescription": "Take a photo to send in a message.",
             ]),
             sources: ["App/Sources/**"],
             resources: ["App/Resources/**"],

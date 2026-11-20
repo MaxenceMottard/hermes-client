@@ -10,6 +10,8 @@ struct ChatView: View {
     @State private var isAddingImages = false
     /// The photos picked in the add sheet. `pending` follows it.
     @State private var pickerItems: [PhotosPickerItem] = []
+    /// Ids of the photos taken with the camera, in the order taken. They are not part of the picker selection.
+    @State private var cameraIDs: [String] = []
     @State private var pending = PendingAttachments<String>()
 
     var body: some View {
@@ -55,7 +57,12 @@ struct ChatView: View {
             }
         }
         .sheet(isPresented: $isAddingImages) {
-            AddToMessageSheet(selection: $pickerItems, maxSelectionCount: ChatSession.maxImagesPerMessage)
+            AddToMessageSheet(
+                selection: $pickerItems,
+                maxSelectionCount: max(1, ChatSession.maxImagesPerMessage - cameraIDs.count),
+                canAddPhoto: pending.entries.count < ChatSession.maxImagesPerMessage,
+                onPhotoTaken: addCameraPhoto
+            )
         }
         .onChange(of: pickerItems) { _, items in
             loadPicked(items)
@@ -74,13 +81,25 @@ private extension ChatView {
         draft = ""
         pending.clear()
         pickerItems = []
+        cameraIDs = []
         Task { await session.send(text, images: images) }
+    }
+
+    /// Everything the composer should hold: the picked photos, then the camera photos.
+    func selectedIDs(_ items: [PhotosPickerItem]) -> [String] {
+        // The shared photo library gives every item an identifier.
+        items.compactMap(\.itemIdentifier) + cameraIDs
     }
 
     /// Loads the newly picked photos into the composer and drops the deselected ones.
     func loadPicked(_ items: [PhotosPickerItem]) {
-        // The shared photo library gives every item an identifier.
-        let toLoad = pending.select(items.compactMap(\.itemIdentifier))
+        // Camera photos count against the limit too: trim the picks that do not fit.
+        let room = ChatSession.maxImagesPerMessage - cameraIDs.count
+        if items.count > room {
+            pickerItems = Array(items.prefix(max(0, room)))
+            return
+        }
+        let toLoad = pending.select(selectedIDs(items))
         for item in items {
             guard let id = item.itemIdentifier, toLoad.contains(id) else { continue }
             Task {
@@ -90,8 +109,20 @@ private extension ChatView {
         }
     }
 
+    /// Adds a photo taken with the camera, downscaled like a picked one.
+    func addCameraPhoto(_ data: Data) {
+        guard pending.entries.count < ChatSession.maxImagesPerMessage,
+              let attachment = ImageAttachmentLoader.jpegAttachment(from: data)
+        else { return }
+        let id = "camera-\(UUID().uuidString)"
+        cameraIDs.append(id)
+        _ = pending.select(selectedIDs(pickerItems))
+        pending.finishLoading(id, attachment: attachment)
+    }
+
     func removeImage(at index: Int) {
         let id = pending.entries[index].id
+        cameraIDs.removeAll { $0 == id }
         let remaining = Set(pending.remove(id))
         pickerItems.removeAll { $0.itemIdentifier.map { !remaining.contains($0) } ?? true }
     }
