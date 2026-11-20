@@ -21,7 +21,7 @@ public struct ConversationExport: Equatable, Sendable {
     public static func make(from conversation: StoredConversation) -> ConversationExport {
         var blocks = ["# \(conversation.title)"]
         for message in conversation.messages {
-            blocks.append("## \(MessageAuthor.name(for: message.role))\n\n\(message.content)")
+            blocks.append("## \(authorName(for: message.role))\n\n\(message.content)")
         }
         return ConversationExport(
             title: conversation.title,
@@ -42,5 +42,14 @@ public struct ConversationExport: Equatable, Sendable {
         let collapsed = cleaned.split(whereSeparator: \.isWhitespace).joined(separator: " ")
         let base = collapsed.trimmingCharacters(in: CharacterSet(charactersIn: ".")).trimmingCharacters(in: .whitespaces)
         return (base.isEmpty ? "conversation" : base) + ".md"
+    }
+}
+
+/// Heading label for a message role in the exported Markdown.
+private func authorName(for role: String) -> String {
+    switch role {
+    case "user": "You"
+    case "assistant": "Hermes"
+    default: role
     }
 }
