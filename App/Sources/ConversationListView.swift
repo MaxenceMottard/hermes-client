@@ -1,8 +1,9 @@
 import HermesChat
 import SwiftUI
 
-/// Sidebar list of conversations. Selecting a row opens it. Rows can be renamed or deleted.
-/// The sessions stored on the Hermes instance are listed above the local conversations, read-only for now.
+/// Sidebar: one list of the conversations on this device and the sessions on the Hermes instance,
+/// most recently used first. Local conversations open and can be renamed or deleted. Remote sessions
+/// are not openable yet, so their rows are plain.
 struct ConversationListView: View {
     let browser: ConversationBrowser
 
@@ -11,42 +12,16 @@ struct ConversationListView: View {
 
     var body: some View {
         List(selection: selection) {
-            if let remote = browser.remoteSessions {
-                Section("Hermes instance") {
-                    RemoteSessionRows(list: remote)
+            ForEach(entries) { entry in
+                switch entry {
+                case .local(let summary):
+                    localRow(summary)
+                case .remote(let session):
+                    remoteRow(session)
                 }
             }
-            Section("On this device") {
-                ForEach(browser.summaries) { summary in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(summary.title)
-                            .lineLimit(1)
-                        Text(summary.updatedAt, style: .relative)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .tag(summary.id)
-                    .contextMenu {
-                        Button("Rename", systemImage: "pencil") {
-                            draftTitle = summary.title
-                            renamingID = summary.id
-                        }
-                        Button("Delete", systemImage: "trash", role: .destructive) {
-                            try? browser.delete(summary.id)
-                        }
-                    }
-                    .swipeActions(edge: .trailing) {
-                        Button("Delete", systemImage: "trash", role: .destructive) {
-                            try? browser.delete(summary.id)
-                        }
-                        Button("Rename", systemImage: "pencil") {
-                            draftTitle = summary.title
-                            renamingID = summary.id
-                        }
-                        .tint(.indigo)
-                    }
-                }
-                .onDelete(perform: delete)
+            if let remote = browser.remoteSessions {
+                RemoteStatusRows(list: remote)
             }
         }
         .task {
@@ -69,6 +44,55 @@ struct ConversationListView: View {
         }
     }
 
+    private var entries: [SidebarEntry] {
+        SidebarEntry.merged(
+            local: browser.summaries,
+            remote: browser.remoteSessions?.sessions ?? []
+        )
+    }
+
+    private func localRow(_ summary: ConversationSummary) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(summary.title)
+                .lineLimit(1)
+            Text(summary.updatedAt, style: .relative)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .tag(summary.id)
+        .contextMenu {
+            Button("Rename", systemImage: "pencil") {
+                draftTitle = summary.title
+                renamingID = summary.id
+            }
+            Button("Delete", systemImage: "trash", role: .destructive) {
+                try? browser.delete(summary.id)
+            }
+        }
+        .swipeActions(edge: .trailing) {
+            Button("Delete", systemImage: "trash", role: .destructive) {
+                try? browser.delete(summary.id)
+            }
+            Button("Rename", systemImage: "pencil") {
+                draftTitle = summary.title
+                renamingID = summary.id
+            }
+            .tint(.indigo)
+        }
+    }
+
+    private func remoteRow(_ session: RemoteSession) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(session.title ?? "Untitled session")
+                .lineLimit(1)
+            if let lastActive = session.lastActive {
+                Text(lastActive, style: .relative)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
     private var selection: Binding<UUID?> {
         Binding(
             get: { browser.selectedID },
@@ -82,31 +106,13 @@ struct ConversationListView: View {
             set: { if !$0 { renamingID = nil } }
         )
     }
-
-    private func delete(at offsets: IndexSet) {
-        for index in offsets {
-            let id = browser.summaries[index].id
-            try? browser.delete(id)
-        }
-    }
 }
 
-/// Rows of the sessions stored on the Hermes instance: the sessions, then a loading, error or "load more" row.
-struct RemoteSessionRows: View {
+/// Footer of the sidebar for the Hermes instance: a loading indicator, an error with retry, or "Load more".
+struct RemoteStatusRows: View {
     let list: RemoteSessionList
 
     var body: some View {
-        ForEach(list.sessions) { session in
-            VStack(alignment: .leading, spacing: 2) {
-                Text(session.title ?? "Untitled session")
-                    .lineLimit(1)
-                if let lastActive = session.lastActive {
-                    Text(lastActive, style: .relative)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
         switch list.state {
         case .loading:
             ProgressView()
