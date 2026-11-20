@@ -7,4 +7,9 @@ public enum HermesAPIPaths {
     /// needs-verification: the Hermes gateway source registers `GET /health` and answers without
     /// checking the API key. The real instance has not been checked yet.
     public static let health = "/health"
+
+    /// Model list used by the settings screen, with a manual fallback.
+    /// needs-verification: the Hermes gateway source registers `GET /v1/models` with the same Bearer auth.
+    /// The real instance has not been checked yet.
+    public static let models = "/v1/models"
 }

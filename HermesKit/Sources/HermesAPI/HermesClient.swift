@@ -150,6 +150,31 @@ public struct HermesClient: Sendable {
         }
     }
 
+    /// Lists the model IDs from `GET {baseURL}/v1/models`.
+    ///
+    /// A failed listing is not an error: any HTTP, network, timeout or contract failure returns
+    /// `.fallback` with the reason, so that the user can type a model name by hand.
+    /// Only cancellation throws (`CancellationError`).
+    public func listModels() async throws -> ModelListResult {
+        do {
+            let request = makeRequest(method: "GET", path: HermesAPIPaths.models, accept: "application/json")
+            let (data, response) = try await session.data(for: request)
+            try Self.validate(response, requestURL: request.url)
+            let list = try JSONDecoder().decode(ModelList.self, from: data)
+            let ids = list.data.map(\.id)
+            guard !ids.isEmpty else {
+                return .fallback(.invalidResponse)
+            }
+            return .models(ids)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as URLError where error.code == .cancelled {
+            throw CancellationError()
+        } catch {
+            return .fallback(HermesAPIError.from(error))
+        }
+    }
+
     /// Builds `POST {baseURL}/v1/chat/completions`. Internal for tests.
     func makeRequest(model: String, messages: [ChatMessage], stream: Bool) throws -> URLRequest {
         var request = makeRequest(
