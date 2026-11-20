@@ -63,6 +63,30 @@ public struct ChatMessage: Codable, Sendable, Equatable {
 }
 
 /// One element of a multimodal `content` array.
+/// The `content` of a user message sent to the instance.
+///
+/// Text alone is encoded as a plain string. With images, it is an array of `text` and `image_url`
+/// parts, the OpenAI vision shape: the text first when there is any, then the images in order.
+struct MessageContent: Encodable, Sendable, Equatable {
+    let text: String
+    let images: [ImageAttachment]
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.singleValueContainer()
+        guard !images.isEmpty else {
+            try container.encode(text)
+            return
+        }
+        var parts: [ContentPart] = []
+        if !text.isEmpty {
+            parts.append(ContentPart(type: "text", text: text))
+        }
+        parts += images.map { ContentPart(type: "image_url", imageURL: ImageURLPart(url: $0.dataURL)) }
+        try container.encode(parts)
+    }
+}
+
+/// One element of a multimodal `content` array.
 private struct ContentPart: Encodable {
     let type: String
     var text: String?

@@ -292,4 +292,84 @@ struct HermesAPISessionsTests {
             try await makeClient().listSessions()
         }
     }
+
+    private static let createdSession = Data(#"""
+    {"object":"hermes.session","session":{"id":"api_1795200000_ab12cd34","source":"api_server",
+    "model":"claude-opus","title":null,"pinned":false,"archived":false,"has_model_config":true}}
+    """#.utf8)
+
+    @Test("a new session is an authenticated POST to /api/sessions that locks the model and its provider")
+    func createRequest() async throws {
+        SessionsURLProtocol.responder = { _ in SessionsReply(status: 201, body: Self.createdSession) }
+
+        let session = try await makeClient().createSession(model: "claude-opus", provider: "anthropic")
+
+        let request = try #require(SessionsURLProtocol.requests.first)
+        #expect(request.httpMethod == "POST")
+        #expect(request.url?.absoluteString == "https://hermes.example.test/api/sessions")
+        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer test-key-123")
+        #expect(request.value(forHTTPHeaderField: "Content-Type") == "application/json")
+        let body = try #require(
+            try JSONSerialization.jsonObject(with: SessionsURLProtocol.bodies.first ?? Data()) as? [String: Any]
+        )
+        #expect(body as NSDictionary == [
+            "model": "claude-opus", "provider": "anthropic", "require_model_lock": true,
+        ] as NSDictionary)
+        #expect(session == RemoteSession(id: "api_1795200000_ab12cd34", source: "api_server", model: "claude-opus"))
+    }
+
+    @Test("a new session without a model sends an empty body: the instance picks its model")
+    func createWithoutModel() async throws {
+        SessionsURLProtocol.responder = { _ in SessionsReply(status: 201, body: Self.createdSession) }
+
+        _ = try await makeClient().createSession()
+
+        #expect(SessionsURLProtocol.bodies.first == Data("{}".utf8))
+    }
+
+    @Test("a rename is a PATCH of the title to /api/sessions/{id} and returns the renamed session")
+    func renameRequest() async throws {
+        SessionsURLProtocol.responder = { _ in
+            SessionsReply(body: Data(#"{"object":"hermes.session","session":{"id":"s1","title":"Budget"}}"#.utf8))
+        }
+
+        let session = try await makeClient().renameSession(sessionID: "s1", title: "Budget")
+
+        let request = try #require(SessionsURLProtocol.requests.first)
+        #expect(request.httpMethod == "PATCH")
+        #expect(request.url?.absoluteString == "https://hermes.example.test/api/sessions/s1")
+        #expect(request.value(forHTTPHeaderField: "Content-Type") == "application/json")
+        #expect(SessionsURLProtocol.bodies.first == Data(#"{"title":"Budget"}"#.utf8))
+        #expect(session.title == "Budget")
+    }
+
+    @Test("a delete is an authenticated DELETE to /api/sessions/{id}")
+    func deleteRequest() async throws {
+        SessionsURLProtocol.responder = { _ in
+            SessionsReply(body: Data(#"{"object":"hermes.session.deleted","id":"s1","deleted":true}"#.utf8))
+        }
+
+        try await makeClient().deleteSession(sessionID: "s1")
+
+        let request = try #require(SessionsURLProtocol.requests.first)
+        #expect(request.httpMethod == "DELETE")
+        #expect(request.url?.absoluteString == "https://hermes.example.test/api/sessions/s1")
+        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer test-key-123")
+    }
+
+    @Test("a delete refused during a turn maps to its status; a slash in the id sends nothing")
+    func deleteErrors() async throws {
+        SessionsURLProtocol.responder = { _ in SessionsReply(status: 409) }
+
+        await #expect(throws: HermesAPIError.http(status: 409)) {
+            try await makeClient().deleteSession(sessionID: "busy")
+        }
+        await #expect(throws: HermesAPIError.invalidResponse) {
+            try await makeClient().deleteSession(sessionID: "a/b")
+        }
+        await #expect(throws: HermesAPIError.invalidResponse) {
+            _ = try await makeClient().renameSession(sessionID: "a/b", title: "x")
+        }
+        #expect(SessionsURLProtocol.requests.count == 1)
+    }
 }

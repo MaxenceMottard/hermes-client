@@ -11,6 +11,7 @@ actor FakeChatStreamSource: SessionListing {
     private let failure: HermesAPIError?
     private let forkResult: Result<RemoteSession, HermesAPIError>
     private(set) var sent: [String] = []
+    private(set) var sentImages: [[ImageAttachment]] = []
     private(set) var sentTo: [String] = []
     private(set) var forked: [String] = []
     private(set) var listedFor: [String] = []
@@ -39,8 +40,11 @@ actor FakeChatStreamSource: SessionListing {
         return SessionMessagesPage(sessionID: sessionID, messages: [], hasMore: false)
     }
 
-    func streamSessionChat(sessionID: String, message: String) -> AsyncThrowingStream<SessionChatEvent, any Error> {
+    func streamSessionChat(
+        sessionID: String, message: String, images: [ImageAttachment]
+    ) -> AsyncThrowingStream<SessionChatEvent, any Error> {
         sent.append(message)
+        sentImages.append(images)
         sentTo.append(sessionID)
         let events = events
         let failure = failure
@@ -167,5 +171,44 @@ struct RemoteTranscriptSendTests {
         #expect(!transcript.acceptsMessages)
         #expect(transcript.sendError?.contains("started outside the app") == true)
         #expect(!transcript.isSending)
+    }
+
+    @Test("images go with the message and show on the user line")
+    func sendsImages() async throws {
+        let source = FakeChatStreamSource(events: [.completed("A cat."), .finished])
+        let transcript = RemoteTranscript(sessionID: "s1", title: nil, source: source)
+        let image = try #require(ImageAttachment(mimeType: "image/jpeg", data: Data([1])))
+
+        await transcript.send("What is this?", images: [image])
+
+        #expect(await source.sentImages == [[image]])
+        #expect(transcript.lines.first?.images == [image])
+        #expect(transcript.lines.map(\.text) == ["What is this?", "A cat."])
+    }
+
+    @Test("a message with images and no text is sent; images past the limit are dropped")
+    func imagesWithoutText() async throws {
+        let source = FakeChatStreamSource(events: [.completed("Five photos."), .finished])
+        let transcript = RemoteTranscript(sessionID: "s1", title: nil, source: source)
+        let images = try (1...5).map { try #require(ImageAttachment(mimeType: "image/png", data: Data([UInt8($0)]))) }
+
+        await transcript.send("  ", images: images)
+
+        #expect(await source.sent == [""])
+        #expect(await source.sentImages.first?.count == RemoteTranscript.maxImagesPerMessage)
+        #expect(transcript.hasSent)
+    }
+
+    @Test("the end of a reply is reported, after a failure too")
+    func replyEndedIsReported() async {
+        let transcript = RemoteTranscript(
+            sessionID: "s1", title: nil, source: FakeChatStreamSource(events: [], failure: .http(status: 500)))
+        var ended = 0
+        transcript.onReplyEnded = { ended += 1 }
+
+        await transcript.send("Hi")
+
+        #expect(ended == 1)
+        #expect(transcript.sendError != nil)
     }
 }

@@ -88,4 +88,22 @@ extension HermesAPISessionsTests {
             try await makeClient().listSessionMessages(sessionID: "gone")
         }
     }
+
+    @Test("a message stored as parts keeps its text")
+    func decodesMultimodalContent() async throws {
+        SessionsURLProtocol.responder = { _ in
+            SessionsReply(body: Data(#"""
+            {"object":"list","session_id":"s","data":[
+              {"id":1,"role":"user","content":[{"type":"text","text":"What is this?"},
+                {"type":"image_url","image_url":{"url":"data:image/png;base64,YWJj"}},{"type":"input_image"}]},
+              {"id":2,"role":"user","content":{"unexpected":true}}
+            ],"pagination":{"limit":200,"offset":0,"returned":2}}
+            """#.utf8))
+        }
+
+        let page = try await makeClient().listSessionMessages(sessionID: "s")
+
+        #expect(page.messages[0].content == "What is this?")
+        #expect(page.messages[1].content == nil)
+    }
 }

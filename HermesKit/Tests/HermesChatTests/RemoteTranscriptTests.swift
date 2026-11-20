@@ -23,7 +23,9 @@ actor FakeMessageSource: SessionListing {
         return try pages.removeFirst().get()
     }
 
-    func streamSessionChat(sessionID: String, message: String) -> AsyncThrowingStream<SessionChatEvent, any Error> {
+    func streamSessionChat(
+        sessionID: String, message: String, images: [ImageAttachment]
+    ) -> AsyncThrowingStream<SessionChatEvent, any Error> {
         AsyncThrowingStream { $0.finish() }
     }
 
@@ -68,7 +70,9 @@ actor GatedMessageSource: SessionListing {
         return page
     }
 
-    func streamSessionChat(sessionID: String, message: String) -> AsyncThrowingStream<SessionChatEvent, any Error> {
+    func streamSessionChat(
+        sessionID: String, message: String, images: [ImageAttachment]
+    ) -> AsyncThrowingStream<SessionChatEvent, any Error> {
         AsyncThrowingStream { $0.finish() }
     }
 
@@ -127,6 +131,18 @@ struct RemoteTranscriptTests {
         #expect(lines.map(\.text) == ["Hello", "Hi!"])
         #expect(lines[1].date == Date(timeIntervalSince1970: 100))
         #expect(lines.map(\.role) == ["user", "assistant"])
+    }
+
+    @Test("a renamed or newly named session gives the open transcript its title")
+    func updateTitle() {
+        let transcript = RemoteTranscript(sessionID: "s1", title: nil, source: FakeMessageSource(pages: []))
+
+        transcript.update(from: RemoteSession(id: "other", title: "Wrong"))
+        transcript.update(from: RemoteSession(id: "s1", title: ""))
+        #expect(transcript.title == nil)
+
+        transcript.update(from: RemoteSession(id: "s1", title: "Trip plans"))
+        #expect(transcript.title == "Trip plans")
     }
 
     @Test("load asks for the first page, newest messages, and keeps hasMore")

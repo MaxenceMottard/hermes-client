@@ -12,9 +12,9 @@ public enum SessionChatEvent: Sendable, Equatable {
     case finished
 }
 
-/// Body of `POST /api/sessions/{id}/chat/stream`. Only text is sent; images are not supported yet.
+/// Body of `POST /api/sessions/{id}/chat/stream`: the user message, with its images when it has any.
 struct SessionChatRequest: Encodable, Sendable {
-    let message: String
+    let message: MessageContent
 }
 
 /// One named SSE event: the `event:` field (`message` when absent) and the joined `data:` lines.

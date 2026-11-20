@@ -22,7 +22,9 @@ actor HangingChatStreamSource: SessionListing {
         return SessionMessagesPage(sessionID: sessionID, messages: [], hasMore: false)
     }
 
-    func streamSessionChat(sessionID: String, message: String) -> AsyncThrowingStream<SessionChatEvent, any Error> {
+    func streamSessionChat(
+        sessionID: String, message: String, images: [ImageAttachment]
+    ) -> AsyncThrowingStream<SessionChatEvent, any Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 continuation.yield(.delta("Hel"))

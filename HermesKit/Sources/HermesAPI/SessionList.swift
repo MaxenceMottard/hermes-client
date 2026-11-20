@@ -96,9 +96,35 @@ public struct RemoteSession: Sendable, Equatable, Identifiable, Decodable {
     }
 }
 
-/// Body of `POST /api/sessions/{id}/fork`: the new session.
-struct SessionForkBody: Decodable, Sendable {
+/// Body of the responses that return one session: `POST /api/sessions` (the new session),
+/// `PATCH /api/sessions/{id}` (the updated one) and `POST /api/sessions/{id}/fork` (the fork).
+struct SessionBody: Decodable, Sendable {
     var session: RemoteSession
+}
+
+/// Body of `POST /api/sessions`. A model is locked on the session, so every turn runs on it; without one
+/// the instance picks its default model.
+struct SessionCreateRequest: Encodable, Sendable {
+    var model: String?
+    var provider: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case model, provider
+        case requireModelLock = "require_model_lock"
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        guard let model else { return }
+        try container.encode(model, forKey: .model)
+        try container.encodeIfPresent(provider, forKey: .provider)
+        try container.encode(true, forKey: .requireModelLock)
+    }
+}
+
+/// Body of `PATCH /api/sessions/{id}` that renames the session.
+struct SessionRenameRequest: Encodable, Sendable {
+    var title: String
 }
 
 /// Body of `GET /api/sessions`. Only the fields needed for the list are read.

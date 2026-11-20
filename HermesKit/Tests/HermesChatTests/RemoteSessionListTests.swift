@@ -23,7 +23,9 @@ actor FakeSessionSource: SessionListing {
         throw HermesAPIError.notFound
     }
 
-    func streamSessionChat(sessionID: String, message: String) -> AsyncThrowingStream<SessionChatEvent, any Error> {
+    func streamSessionChat(
+        sessionID: String, message: String, images: [ImageAttachment]
+    ) -> AsyncThrowingStream<SessionChatEvent, any Error> {
         AsyncThrowingStream { $0.finish() }
     }
 
@@ -150,8 +152,16 @@ struct RemoteSessionListTests {
     func transcriptModel() {
         let list = RemoteSessionList(source: FakeSessionSource(pages: []))
 
-        #expect(list.transcript(for: RemoteSession(id: "a", model: "claude-opus")).model == "claude-opus")
+        #expect(list.transcript(for: RemoteSession(id: "a", model: "claude-opus")).model == ModelChoice(model: "claude-opus"))
         #expect(list.transcript(for: RemoteSession(id: "b")).model == nil)
+    }
+
+    @Test("a model given with the session, provider included, wins over the one the instance lists")
+    func transcriptModelOverride() {
+        let list = RemoteSessionList(source: FakeSessionSource(pages: []))
+        let choice = ModelChoice(model: "claude-opus", provider: "anthropic")
+
+        #expect(list.transcript(for: RemoteSession(id: "a", model: "claude-opus"), model: choice).model == choice)
     }
 
     @Test("a fork takes the row of the original session")
@@ -175,5 +185,47 @@ struct RemoteSessionListTests {
         list.replace("gone", with: session("api_fork"))
 
         #expect(list.sessions.map(\.id) == ["api_fork"])
+    }
+
+    @Test("create puts the new session at the top and sends the model with its provider")
+    func createAtTop() async throws {
+        let instance = FakeInstance(sessions: [session("a")])
+        let list = RemoteSessionList(source: instance)
+        await list.reload()
+
+        let created = try await list.create(model: ModelChoice(model: "opus", provider: "anthropic"))
+
+        #expect(list.sessions.map(\.id) == [created.id, "a"])
+        #expect(await instance.created == [FakeInstance.Created(model: "opus", provider: "anthropic")])
+    }
+
+    @Test("rename keeps the row in place and ignores a blank title")
+    func renameInPlace() async throws {
+        let instance = FakeInstance(sessions: [session("a"), session("b"), session("c")])
+        let list = RemoteSessionList(source: instance)
+        await list.reload()
+
+        try await list.rename("b", to: " Budget ")
+        try await list.rename("b", to: "")
+
+        #expect(list.sessions.map(\.id) == ["a", "b", "c"])
+        #expect(list.sessions[1].title == "Budget")
+        #expect(await instance.renamed == ["Budget"])
+    }
+
+    @Test("delete removes the row once the instance deleted the session, and keeps it otherwise")
+    func deleteRow() async throws {
+        let instance = FakeInstance(sessions: [session("a"), session("b")])
+        let list = RemoteSessionList(source: instance)
+        await list.reload()
+
+        try await list.delete("a")
+        #expect(list.sessions.map(\.id) == ["b"])
+
+        await instance.failDeletes(with: .notFound)
+        await #expect(throws: HermesAPIError.notFound) {
+            try await list.delete("b")
+        }
+        #expect(list.sessions.map(\.id) == ["b"])
     }
 }

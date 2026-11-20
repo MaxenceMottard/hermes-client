@@ -110,7 +110,7 @@ struct RemoteChatView: View {
                     ChatComposer(
                         draft: $draft,
                         isFocused: $isComposerFocused,
-                        model: transcript.model.map { ModelChoice(model: $0) },
+                        model: transcript.model,
                         isBusy: transcript.isSending,
                         canSend: !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                         onSend: {

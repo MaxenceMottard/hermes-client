@@ -23,4 +23,10 @@ struct HermesAPIPathsTests {
     func sessionForkPath() {
         #expect(HermesAPIPaths.sessionFork("abc") == "/api/sessions/abc/fork")
     }
+
+    @Test("one session is /api/sessions/{id}, its chat stream /api/sessions/{id}/chat/stream")
+    func sessionPaths() {
+        #expect(HermesAPIPaths.session("abc") == "/api/sessions/abc")
+        #expect(HermesAPIPaths.sessionChatStream("abc") == "/api/sessions/abc/chat/stream")
+    }
 }

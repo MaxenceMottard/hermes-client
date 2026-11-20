@@ -17,6 +17,12 @@ public enum HermesAPIPaths {
     /// Read from the Hermes gateway source (`api_server.py`); the real instance has not been checked yet.
     public static let sessions = "/api/sessions"
 
+    /// One session, `GET`, `PATCH` (title) or `DELETE /api/sessions/{id}`. The id is appended as a path segment.
+    /// Read from the Hermes gateway source (`api_server.py`).
+    public static func session(_ sessionID: String) -> String {
+        "\(sessions)/\(sessionID)"
+    }
+
     /// Messages of one session, `GET /api/sessions/{id}/messages`. The id is appended as a path segment.
     public static func sessionMessages(_ sessionID: String) -> String {
         "\(sessions)/\(sessionID)/messages"
