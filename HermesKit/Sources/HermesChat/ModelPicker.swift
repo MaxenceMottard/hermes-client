@@ -54,6 +54,9 @@ public final class ModelPicker {
     public private(set) var state: State
     /// The model the conversation will start on. Bound to the list selection or to the text fields.
     public var selection: ModelChoice
+    /// Ids of the sections that show their models. When the lists load, only the section holding the
+    /// selection is open.
+    public private(set) var expandedSectionIDs: Set<String> = []
 
     private let catalog: (any ModelCatalog)?
     private let defaultChoice: ModelChoice
@@ -108,6 +111,22 @@ public final class ModelPicker {
         selection.normalized
     }
 
+    /// Whether the section with this id shows its models.
+    public func isExpanded(_ sectionID: String) -> Bool {
+        expandedSectionIDs.contains(sectionID)
+    }
+
+    /// Opens a closed section, or closes an open one. Does not change the selection.
+    public func toggle(_ sectionID: String) {
+        if expandedSectionIDs.contains(sectionID) {
+            expandedSectionIDs.remove(sectionID)
+        } else {
+            expandedSectionIDs.insert(sectionID)
+        }
+    }
+
+    /// Shows the sections, keeps the selection if listed (else selects the default), and opens only the
+    /// section that holds the selection.
     private func show(_ sections: [ModelSection]) {
         let defaultSection = ModelSection(id: Self.defaultSectionID, title: "Instance default", choices: [defaultChoice])
         let all = [defaultSection] + sections
@@ -115,5 +134,6 @@ public final class ModelPicker {
         if !all.contains(where: { $0.choices.contains(selection) }) {
             selection = defaultChoice
         }
+        expandedSectionIDs = Set(all.first { $0.choices.contains(selection) }.map { [$0.id] } ?? [])
     }
 }

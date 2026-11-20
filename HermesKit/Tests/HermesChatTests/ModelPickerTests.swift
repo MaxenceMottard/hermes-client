@@ -78,6 +78,44 @@ struct ModelPickerTests {
         #expect(picker.selection == instanceDefault)
     }
 
+    @Test("only the section holding the preferred model is open after loading")
+    func onlySelectedSectionIsOpen() async {
+        let preferred = ModelChoice(model: "gpt", provider: "openai")
+        let picker = makePicker(FakeModelCatalog(options: .options(catalogOptions)), preferred: preferred)
+
+        await picker.load()
+
+        #expect(picker.expandedSectionIDs == ["openai"])
+        #expect(picker.isExpanded("openai"))
+        #expect(!picker.isExpanded("anthropic"))
+        #expect(!picker.isExpanded("default"))
+    }
+
+    @Test("when the preferred model is not listed, only the instance default section is open")
+    func defaultSectionOpenWhenPreferredMissing() async {
+        let picker = makePicker(
+            FakeModelCatalog(options: .options(catalogOptions)),
+            preferred: ModelChoice(model: "gone", provider: "anthropic"))
+
+        await picker.load()
+
+        #expect(picker.expandedSectionIDs == ["default"])
+    }
+
+    @Test("toggle opens and closes a section without changing the selection")
+    func toggleSection() async {
+        let picker = makePicker(FakeModelCatalog(options: .options(catalogOptions)), preferred: instanceDefault)
+        await picker.load()
+
+        picker.toggle("anthropic")
+        #expect(picker.isExpanded("anthropic"))
+        #expect(picker.isExpanded("default"))
+
+        picker.toggle("default")
+        #expect(!picker.isExpanded("default"))
+        #expect(picker.selection == instanceDefault)
+    }
+
     @Test("the same model under another provider is not the preferred one")
     func providerIsPartOfTheChoice() async {
         let picker = makePicker(

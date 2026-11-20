@@ -50,10 +50,14 @@ struct NewConversationView: View {
         case .sections(let sections):
             List {
                 ForEach(sections) { section in
-                    Section(section.title) {
-                        ForEach(section.choices, id: \.self) { choice in
-                            row(choice)
+                    Section {
+                        if picker.isExpanded(section.id) {
+                            ForEach(section.choices, id: \.self) { choice in
+                                row(choice)
+                            }
                         }
+                    } header: {
+                        sectionHeader(section)
                     }
                 }
             }
@@ -71,6 +75,31 @@ struct NewConversationView: View {
                 }
             }
         }
+    }
+
+    /// Tappable section header: the provider name, its model count, and a chevron that shows whether
+    /// the section is open. A custom header works in every list style, unlike `Section(isExpanded:)`.
+    private func sectionHeader(_ section: ModelSection) -> some View {
+        let expanded = picker.isExpanded(section.id)
+        return Button {
+            withAnimation {
+                picker.toggle(section.id)
+            }
+        } label: {
+            HStack {
+                Text(section.title)
+                Text("\(section.choices.count)")
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .rotationEffect(.degrees(expanded ? 90 : 0))
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(section.title)
+        .accessibilityValue(expanded ? "Expanded" : "Collapsed")
+        .accessibilityHint("Shows or hides the models")
     }
 
     private func row(_ choice: ModelChoice) -> some View {
