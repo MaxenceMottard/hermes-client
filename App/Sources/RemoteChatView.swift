@@ -31,7 +31,7 @@ struct RemoteChatView: View {
             // iOS 27 the first leaves the viewport blank until the user scrolls, and the second does nothing
             // after a prepend. The scroll position is driven through `scrollPosition(_:anchor:)` instead.
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 12) {
+                LazyVStack(alignment: .leading, spacing: 24) {
                     ForEach(transcript.lines) { line in
                         MessageRow(message: ChatMessage(role: line.role, content: line.text))
                     }
