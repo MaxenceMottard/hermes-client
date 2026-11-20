@@ -61,7 +61,7 @@ struct ConversationListView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
-        .tag(summary.id)
+        .tag(SidebarEntry.localID(summary.id))
         .contextMenu {
             Button("Rename", systemImage: "pencil") {
                 draftTitle = summary.title
@@ -84,27 +84,24 @@ struct ConversationListView: View {
     }
 
     private func remoteRow(_ session: RemoteSession) -> some View {
-        Button {
-            browser.openRemote(session)
-        } label: {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(session.title ?? "Untitled session")
-                    .lineLimit(1)
-                if let lastActive = session.lastActive {
-                    Text(lastActive, style: .relative)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+        VStack(alignment: .leading, spacing: 2) {
+            Text(session.title ?? "Untitled session")
+                .lineLimit(1)
+            if let lastActive = session.lastActive {
+                Text(lastActive, style: .relative)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .buttonStyle(.plain)
+        .tag(SidebarEntry.remoteID(session.id))
     }
 
-    private var selection: Binding<UUID?> {
+    /// One selection for local and remote rows. On compact widths the split view collapses into a
+    /// stack, and only the list selection pushes the detail: a row outside it never opens.
+    private var selection: Binding<String?> {
         Binding(
-            get: { browser.selectedID },
-            set: { browser.select($0) }
+            get: { browser.selectedEntryID },
+            set: { browser.selectEntry($0) }
         )
     }
 
