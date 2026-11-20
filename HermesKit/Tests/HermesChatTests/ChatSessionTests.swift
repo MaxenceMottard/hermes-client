@@ -18,6 +18,7 @@ final class FakeChatService: ChatService, @unchecked Sendable {
     private let lock = NSLock()
     private var scripts: [Script]
     private var requests: [[ChatMessage]] = []
+    private var models: [String] = []
 
     init(scripts: [Script]) {
         self.scripts = scripts
@@ -29,9 +30,17 @@ final class FakeChatService: ChatService, @unchecked Sendable {
         return requests
     }
 
+    /// The model of each request, in order.
+    func recordedModels() -> [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return models
+    }
+
     func streamChat(model: String, messages: [ChatMessage]) -> AsyncThrowingStream<String, any Error> {
         lock.lock()
         requests.append(messages)
+        models.append(model)
         let script = scripts.isEmpty ? Script.deltas([]) : scripts.removeFirst()
         lock.unlock()
 

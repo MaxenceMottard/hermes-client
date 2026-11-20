@@ -15,13 +15,23 @@ public struct StoredMessage: Equatable, Sendable {
 public struct StoredConversation: Equatable, Sendable, Identifiable {
     public let id: UUID
     public var title: String
+    /// The model the conversation talks to. `nil` for conversations saved before models were stored.
+    public var model: String?
     public var createdAt: Date
     public var updatedAt: Date
     public var messages: [StoredMessage]
 
-    public init(id: UUID, title: String, createdAt: Date, updatedAt: Date, messages: [StoredMessage]) {
+    public init(
+        id: UUID,
+        title: String,
+        model: String? = nil,
+        createdAt: Date,
+        updatedAt: Date,
+        messages: [StoredMessage]
+    ) {
         self.id = id
         self.title = title
+        self.model = model
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.messages = messages
@@ -32,11 +42,14 @@ public struct StoredConversation: Equatable, Sendable, Identifiable {
 public struct ConversationSummary: Equatable, Sendable, Identifiable {
     public let id: UUID
     public var title: String
+    /// The model of the conversation, `nil` when it was saved without one.
+    public var model: String?
     public var updatedAt: Date
 
-    public init(id: UUID, title: String, updatedAt: Date) {
+    public init(id: UUID, title: String, model: String? = nil, updatedAt: Date) {
         self.id = id
         self.title = title
+        self.model = model
         self.updatedAt = updatedAt
     }
 }
@@ -52,13 +65,22 @@ public protocol ConversationStore: AnyObject {
     /// All conversations, most recently updated first.
     func summaries() throws -> [ConversationSummary]
     func conversation(id: UUID) throws -> StoredConversation?
+    /// Creates an empty conversation bound to `model` (`nil` leaves it unset).
     @discardableResult
-    func createConversation(title: String) throws -> StoredConversation
+    func createConversation(title: String, model: String?) throws -> StoredConversation
     /// Replaces every message of the conversation and bumps its `updatedAt`.
     func replaceMessages(_ messages: [StoredMessage], inConversation id: UUID) throws
     /// Renames the conversation. Does not change its position in the list.
     func rename(conversation id: UUID, to title: String) throws
     func deleteConversation(id: UUID) throws
+}
+
+extension ConversationStore {
+    /// Creates an empty conversation with no model set.
+    @discardableResult
+    public func createConversation(title: String) throws -> StoredConversation {
+        try createConversation(title: title, model: nil)
+    }
 }
 
 /// Non-persistent store. Used by tests and as a fallback.
@@ -74,17 +96,17 @@ public final class InMemoryConversationStore: ConversationStore {
     public func summaries() throws -> [ConversationSummary] {
         conversations.values
             .sorted { $0.updatedAt > $1.updatedAt }
-            .map { ConversationSummary(id: $0.id, title: $0.title, updatedAt: $0.updatedAt) }
+            .map { ConversationSummary(id: $0.id, title: $0.title, model: $0.model, updatedAt: $0.updatedAt) }
     }
 
     public func conversation(id: UUID) throws -> StoredConversation? {
         conversations[id]
     }
 
-    public func createConversation(title: String) throws -> StoredConversation {
+    public func createConversation(title: String, model: String?) throws -> StoredConversation {
         let date = now()
         let conversation = StoredConversation(
-            id: UUID(), title: title, createdAt: date, updatedAt: date, messages: []
+            id: UUID(), title: title, model: model, createdAt: date, updatedAt: date, messages: []
         )
         conversations[conversation.id] = conversation
         return conversation

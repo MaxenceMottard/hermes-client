@@ -26,6 +26,15 @@
             #expect(try store.summaries().map(\.id) == [created.id])
         }
 
+        @Test("the model is saved with the conversation and shown in its summary")
+        func keepsModel() throws {
+            let store = try makeStore()
+            let created = try store.createConversation(title: "First", model: "some-model")
+
+            #expect(try store.conversation(id: created.id)?.model == "some-model")
+            #expect(try store.summaries().first?.model == "some-model")
+        }
+
         @Test("rename and delete")
         func renameAndDelete() throws {
             let store = try makeStore()
