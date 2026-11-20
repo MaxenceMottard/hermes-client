@@ -39,6 +39,8 @@ jobs:
       APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
       APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
       BUILD_NUMBER: ${{ github.run_number }}.${{ github.run_attempt }}
+      # Tuist keys uploads on (binary ID, version): the marketing version must change per run as well.
+      MARKETING_VERSION_PREVIEW: 5.1.${{ github.run_number }}
     steps:
       - name: Remove the preview-ios label
         env:
@@ -104,7 +106,8 @@ jobs:
             -authenticationKeyPath "${{ steps.api-key.outputs.path }}" \
             -authenticationKeyID "$APP_STORE_CONNECT_KEY_ID" \
             -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
-            CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+            MARKETING_VERSION="$MARKETING_VERSION_PREVIEW"
       - name: Export ad hoc IPA
         run: |
           cat > "$RUNNER_TEMP/ExportOptions.plist" <<'PLIST'
@@ -145,6 +148,8 @@ jobs:
     timeout-minutes: 45
     env:
       BUILD_NUMBER: ${{ github.run_number }}.${{ github.run_attempt }}
+      # Tuist keys uploads on (binary ID, version): the marketing version must change per run as well.
+      MARKETING_VERSION_PREVIEW: 5.1.${{ github.run_number }}
     steps:
       - uses: actions/checkout@v7
       - uses: jdx/mise-action@v5
@@ -164,6 +169,7 @@ jobs:
             -scheme Hermes \
             -configuration Debug \
             -sdk iphonesimulator \
-            CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+            MARKETING_VERSION="$MARKETING_VERSION_PREVIEW"
       - name: Share simulator preview
         run: tuist share Hermes --configuration Debug --platforms ios
