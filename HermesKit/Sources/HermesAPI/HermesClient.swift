@@ -276,10 +276,11 @@ public struct HermesClient: Sendable {
         }
     }
 
-    /// Fetches one page of a session's messages, oldest first, from `GET {baseURL}/api/sessions/{id}/messages`.
+    /// Fetches one page of a session's messages, from `GET {baseURL}/api/sessions/{id}/messages`.
     ///
-    /// `limit` is clamped to 1...500, the maximum the instance accepts; `offset` to 0 or more. `hasMore` is
-    /// true when the page was full. Failures are thrown, as for `listSessions(limit:offset:)`.
+    /// Paging starts from the newest message: `offset` 0 is the last message, and each larger offset goes back
+    /// in time. The page itself is in chronological order, oldest first. `limit` is clamped to 1...500, the
+    /// maximum the instance accepts; `offset` to 0 or more. `hasMore` is true when the page was full. Failures are thrown, as for `listSessions(limit:offset:)`.
     public func listSessionMessages(sessionID: String, limit: Int = 200, offset: Int = 0) async throws -> SessionMessagesPage {
         do {
             // The id goes into the path as is: it must be a single segment.
@@ -290,7 +291,7 @@ public struct HermesClient: Sendable {
             let query = [
                 URLQueryItem(name: "limit", value: String(pageLimit)),
                 URLQueryItem(name: "offset", value: String(max(offset, 0))),
-                URLQueryItem(name: "order", value: "oldest"),
+                URLQueryItem(name: "order", value: "latest"),
             ]
             let request = makeRequest(
                 method: "GET",

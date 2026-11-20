@@ -11,14 +11,41 @@ struct RemoteChatView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 12) {
-                    ForEach(transcript.lines) { line in
-                        MessageRow(message: ChatMessage(role: line.role, content: line.text))
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 12) {
+                        // Sentinel at the top: appearing here means the reader reached the oldest shown line.
+                        Color.clear
+                            .frame(height: 1)
+                            .onAppear {
+                                loadOlderIfNeeded(proxy)
+                            }
+                        topFooter
+                        ForEach(transcript.lines) { line in
+                            MessageRow(message: ChatMessage(role: line.role, content: line.text))
+                                .id(line.id)
+                        }
                     }
-                    footer
+                    .padding()
                 }
-                .padding()
+                // Opens on the newest message and stays there while older pages are added above it.
+                .defaultScrollAnchor(.bottom)
+                // Scrolling near the top pulls in the next older page.
+                .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                    geometry.contentOffset.y
+                } action: { _, offsetY in
+                    if offsetY < 200 {
+                        loadOlderIfNeeded(proxy)
+                    }
+                }
+                // A message sent from here scrolls the transcript back to the bottom.
+                .onChange(of: transcript.lines.last?.id) { _, lastID in
+                    if let lastID {
+                        withAnimation {
+                            proxy.scrollTo(lastID, anchor: .bottom)
+                        }
+                    }
+                }
             }
 
             if transcript.isSending {
@@ -67,9 +94,23 @@ struct RemoteChatView: View {
         }
     }
 
+    /// Older messages are loaded above the first shown line, which keeps its place on screen.
+    private func loadOlderIfNeeded(_ proxy: ScrollViewProxy) {
+        guard transcript.hasMore, transcript.state == .loaded else { return }
+        let firstShown = transcript.lines.first?.id
+        Task {
+            await transcript.loadMore()
+            if let firstShown {
+                proxy.scrollTo(firstShown, anchor: .top)
+            }
+        }
+    }
+
     @ViewBuilder
-    private var footer: some View {
+    private var topFooter: some View {
         switch transcript.state {
+        case .idle, .loaded:
+            EmptyView()
         case .loading:
             ProgressView()
         case .failed(let error):
@@ -79,12 +120,6 @@ struct RemoteChatView: View {
                     .foregroundStyle(.secondary)
                 Button("Retry") {
                     Task { await transcript.load() }
-                }
-            }
-        case .idle, .loaded:
-            if transcript.hasMore {
-                Button("Load more") {
-                    Task { await transcript.loadMore() }
                 }
             }
         }

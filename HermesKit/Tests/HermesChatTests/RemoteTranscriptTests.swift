@@ -61,7 +61,7 @@ struct RemoteTranscriptTests {
         #expect(lines.map(\.role) == ["user", "assistant"])
     }
 
-    @Test("load asks for the first page, oldest first, and keeps hasMore")
+    @Test("load asks for the first page, newest messages, and keeps hasMore")
     func loadFirstPage() async {
         let source = FakeMessageSource(pages: [
             .success(SessionMessagesPage(
@@ -101,7 +101,7 @@ struct RemoteTranscriptTests {
         await transcript.loadMore()
 
         #expect(await source.requests.map(\.offset) == [0, 2])
-        #expect(transcript.lines.map(\.id) == ["2", "3"])
+        #expect(transcript.lines.map(\.id) == ["3", "2"])
         #expect(!transcript.hasMore)
     }
 

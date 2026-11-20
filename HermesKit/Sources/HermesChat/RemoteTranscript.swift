@@ -23,8 +23,9 @@ public struct TranscriptLine: Identifiable, Equatable, Sendable {
 /// The messages of a session stored on the Hermes instance, and a way to continue it.
 ///
 /// Only user and assistant messages with text are kept. Tool, system and compaction rows, and rows the
-/// instance marks as hidden, are dropped. Pages are requested with an offset counted in received
-/// messages, not in displayed lines.
+/// instance marks as hidden, are dropped. The first page holds the newest messages; each further page holds
+/// older ones and is put above the lines already shown. Pages are requested with an offset counted in
+/// received messages, not in displayed lines.
 ///
 /// `send(_:)` posts a message to the session and shows the reply as it streams. Its lines live only in
 /// this object until the transcript is loaded again.
@@ -99,7 +100,7 @@ public final class RemoteTranscript: Identifiable {
         }
     }
 
-    /// Appends the next page, if the instance reported one.
+    /// Prepends the next page of older messages, if the instance reported one.
     public func loadMore() async {
         guard hasMore, state != .loading else { return }
         state = .loading
@@ -107,7 +108,7 @@ public final class RemoteTranscript: Identifiable {
             let page = try await source.listSessionMessages(
                 sessionID: sessionID, limit: Self.pageSize, offset: received
             )
-            lines += Self.lines(from: page.messages)
+            lines = Self.lines(from: page.messages) + lines
             received += page.messages.count
             hasMore = page.hasMore
             state = .loaded

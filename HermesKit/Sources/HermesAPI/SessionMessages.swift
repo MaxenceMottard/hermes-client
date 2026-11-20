@@ -1,6 +1,6 @@
 import Foundation
 
-/// One page of `GET /api/sessions/{id}/messages`, oldest message first.
+/// One page of `GET /api/sessions/{id}/messages`, in chronological order. Pages count back from the newest message.
 public struct SessionMessagesPage: Sendable, Equatable {
     public let sessionID: String
     /// Messages as the instance sent them, compaction scaffolding included. Filtering is the caller's job.
