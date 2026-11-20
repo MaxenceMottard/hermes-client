@@ -18,6 +18,10 @@ actor FakeSessionSource: SessionListing {
         guard !pages.isEmpty else { return SessionPage(sessions: [], hasMore: false) }
         return try pages.removeFirst().get()
     }
+
+    func listSessionMessages(sessionID: String, limit: Int, offset: Int) async throws -> SessionMessagesPage {
+        throw HermesAPIError.notFound
+    }
 }
 
 @MainActor

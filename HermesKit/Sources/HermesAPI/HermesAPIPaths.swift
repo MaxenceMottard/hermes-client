@@ -16,4 +16,9 @@ public enum HermesAPIPaths {
     /// Session list used by the conversation list, `GET /api/sessions?limit&offset`.
     /// Read from the Hermes gateway source (`api_server.py`); the real instance has not been checked yet.
     public static let sessions = "/api/sessions"
+
+    /// Messages of one session, `GET /api/sessions/{id}/messages`. The id is appended as a path segment.
+    public static func sessionMessages(_ sessionID: String) -> String {
+        "\(sessions)/\(sessionID)/messages"
+    }
 }

@@ -54,13 +54,13 @@ final class SessionsURLProtocol: URLProtocol {
 
 @Suite("HermesClient.listSessions", .serialized)
 struct HermesAPISessionsTests {
-    private let baseURL = URL(string: "https://hermes.example.test") ?? URL(filePath: "/")
+    let baseURL = URL(string: "https://hermes.example.test") ?? URL(filePath: "/")
 
     init() {
         SessionsURLProtocol.reset()
     }
 
-    private func makeClient(baseURL: URL? = nil) -> HermesClient {
+    func makeClient(baseURL: URL? = nil) -> HermesClient {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [SessionsURLProtocol.self]
         return HermesClient(

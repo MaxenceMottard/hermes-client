@@ -8,6 +8,7 @@ import HermesAPI
 /// Source of the Hermes session list. `HermesClient` conforms; tests provide a fake.
 public protocol SessionListing: Sendable {
     func listSessions(limit: Int, offset: Int) async throws -> SessionPage
+    func listSessionMessages(sessionID: String, limit: Int, offset: Int) async throws -> SessionMessagesPage
 }
 
 extension HermesClient: SessionListing {}
@@ -82,5 +83,10 @@ public final class RemoteSessionList {
         } catch {
             state = .failed(HermesAPIError.from(error))
         }
+    }
+
+    /// The messages of one session, loaded on demand by the transcript view.
+    public func transcript(for session: RemoteSession) -> RemoteTranscript {
+        RemoteTranscript(sessionID: session.id, title: session.title, source: source)
     }
 }

@@ -4,13 +4,14 @@ import HermesStore
 import SwiftUI
 
 /// Sidebar: one list of the conversations on this device and the sessions on the Hermes instance,
-/// most recently used first. Local conversations open and can be renamed or deleted. Remote sessions
-/// are not openable yet, so their rows are plain.
+/// most recently used first. Local conversations open and can be renamed or deleted. A remote session
+/// opens read-only in a sheet.
 struct ConversationListView: View {
     let browser: ConversationBrowser
 
     @State private var renamingID: UUID?
     @State private var draftTitle = ""
+    @State private var openedTranscript: RemoteTranscript?
 
     var body: some View {
         List(selection: selection) {
@@ -25,6 +26,9 @@ struct ConversationListView: View {
             if let remote = browser.remoteSessions {
                 RemoteStatusRows(list: remote)
             }
+        }
+        .sheet(item: $openedTranscript) { transcript in
+            RemoteTranscriptView(transcript: transcript)
         }
         .task {
             await browser.remoteSessions?.reload()
@@ -84,15 +88,21 @@ struct ConversationListView: View {
     }
 
     private func remoteRow(_ session: RemoteSession) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(session.title ?? "Untitled session")
-                .lineLimit(1)
-            if let lastActive = session.lastActive {
-                Text(lastActive, style: .relative)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        Button {
+            openedTranscript = browser.remoteSessions?.transcript(for: session)
+        } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(session.title ?? "Untitled session")
+                    .lineLimit(1)
+                if let lastActive = session.lastActive {
+                    Text(lastActive, style: .relative)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .buttonStyle(.plain)
     }
 
     private var selection: Binding<UUID?> {
