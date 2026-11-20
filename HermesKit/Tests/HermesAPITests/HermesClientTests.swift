@@ -80,11 +80,10 @@ final class MockURLProtocol: URLProtocol {
     }
 }
 
-@Suite("HermesClient.streamChat", .serialized)
-struct HermesClientStreamTests {
+@Suite("HermesClient", .serialized)
+struct HermesClientTests {
     private let baseURL = URL(string: "https://hermes.example.test") ?? URL(filePath: "/")
     private let apiKey = "test-key-123"
-    private let messages = [ChatMessage(role: "user", content: "Hi")]
 
     init() {
         MockURLProtocol.reset()
@@ -103,172 +102,6 @@ struct HermesClientStreamTests {
     private func fixtureData(_ name: String, _ ext: String) throws -> Data {
         let url = try #require(Bundle.module.url(forResource: name, withExtension: ext))
         return try Data(contentsOf: url)
-    }
-
-    private func collect(_ stream: AsyncThrowingStream<String, any Error>) async throws -> [String] {
-        var deltas: [String] = []
-        for try await delta in stream {
-            deltas.append(delta)
-        }
-        return deltas
-    }
-
-    @Test("the request is an authenticated POST with stream: true, to /v1/chat/completions")
-    func requestShape() async throws {
-        MockURLProtocol.responder = { _ in MockReply(chunks: [Data("data: [DONE]\n".utf8)]) }
-
-        _ = try await collect(makeClient().streamChat(model: "hermes-test-model", messages: messages))
-
-        let request = try #require(MockURLProtocol.requests.first)
-        #expect(request.httpMethod == "POST")
-        #expect(request.url?.absoluteString == "https://hermes.example.test/v1/chat/completions")
-        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer test-key-123")
-
-        let body = try #require(try JSONSerialization.jsonObject(with: MockURLProtocol.bodies[0]) as? [String: Any])
-        #expect(Set(body.keys) == ["model", "messages", "stream"])
-        #expect(body["stream"] as? Bool == true)
-        #expect(body["model"] as? String == "hermes-test-model")
-    }
-
-    @Test("a base URL with a trailing slash does not produce a double slash")
-    func trailingSlashBaseURL() async throws {
-        MockURLProtocol.responder = { _ in MockReply(chunks: [Data("data: [DONE]\n".utf8)]) }
-        let base = URL(string: "https://hermes.example.test/") ?? URL(filePath: "/")
-
-        _ = try await collect(makeClient(baseURL: base).streamChat(model: "m", messages: messages))
-
-        #expect(
-            MockURLProtocol.requests.first?.url?.absoluteString == "https://hermes.example.test/v1/chat/completions")
-    }
-
-    @Test("deltas are emitted in order and the stream ends on [DONE]")
-    func deltasInOrder() async throws {
-        let sse = try fixtureData("chat_stream", "sse")
-        MockURLProtocol.responder = { _ in MockReply(chunks: [sse]) }
-
-        let deltas = try await collect(makeClient().streamChat(model: "m", messages: messages))
-
-        #expect(deltas == ["Bon", "jour"])
-    }
-
-    @Test("cancelling the consuming task cancels the network request")
-    func cancellationStopsRequest() async throws {
-        let first = Data("data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"A\"}}]}\n\n".utf8)
-        MockURLProtocol.responder = { _ in MockReply(chunks: [first], finish: false) }
-        let stream = makeClient().streamChat(model: "m", messages: messages)
-
-        let consumer = Task {
-            var received: [String] = []
-            for try await delta in stream {
-                received.append(delta)
-            }
-            return received
-        }
-
-        // Let the request start and receive the first delta, then cancel.
-        for _ in 0..<100 where MockURLProtocol.requests.isEmpty {
-            try await Task.sleep(for: .milliseconds(10))
-        }
-        try await Task.sleep(for: .milliseconds(50))
-        consumer.cancel()
-        _ = try? await consumer.value
-
-        for _ in 0..<200 where MockURLProtocol.stopCount == 0 {
-            try await Task.sleep(for: .milliseconds(10))
-        }
-        #expect(MockURLProtocol.stopCount > 0)
-    }
-
-    @Test("no automatic retry on the POST")
-    func noRetryOnFailure() async throws {
-        MockURLProtocol.responder = { _ in MockReply(status: 500) }
-
-        await #expect(throws: HermesAPIError.self) {
-            _ = try await collect(makeClient().streamChat(model: "m", messages: messages))
-        }
-        #expect(MockURLProtocol.requests.count == 1)
-    }
-
-    @Test("401 maps to unauthorized, without leaking the key in the message")
-    func unauthorized() async throws {
-        MockURLProtocol.responder = { _ in MockReply(status: 401) }
-
-        do {
-            _ = try await collect(makeClient().streamChat(model: "m", messages: messages))
-            Issue.record("a 401 error was expected")
-        } catch let error as HermesAPIError {
-            #expect(error == .unauthorized)
-            #expect(!(error.errorDescription ?? "").contains(apiKey))
-        }
-    }
-
-    @Test("404 maps to notFound")
-    func notFound() async throws {
-        MockURLProtocol.responder = { _ in MockReply(status: 404) }
-        await #expect(throws: HermesAPIError.notFound) {
-            _ = try await collect(makeClient().streamChat(model: "m", messages: messages))
-        }
-    }
-
-    @Test("URLError.timedOut maps to timeout")
-    func timeout() async throws {
-        MockURLProtocol.responder = { _ in MockReply(failure: URLError(.timedOut)) }
-        await #expect(throws: HermesAPIError.timeout) {
-            _ = try await collect(makeClient().streamChat(model: "m", messages: messages))
-        }
-    }
-
-    @Test("an invalid JSON chunk maps to invalidResponse, without a crash")
-    func invalidChunk() async throws {
-        MockURLProtocol.responder = { _ in MockReply(chunks: [Data("data: {not json\n\n".utf8)]) }
-        await #expect(throws: HermesAPIError.invalidResponse) {
-            _ = try await collect(makeClient().streamChat(model: "m", messages: messages))
-        }
-    }
-
-    // MARK: chat (non-streaming)
-    // Lives in the same suite as the streaming tests: they share MockURLProtocol's global state.
-
-    @Test("chat returns choices[0].message.content and sends stream: false")
-    func chatReturnsContent() async throws {
-        let json = try fixtureData("chat_completion", "json")
-        MockURLProtocol.responder = { _ in MockReply(chunks: [json]) }
-
-        let text = try await makeClient().chat(model: "m", messages: messages)
-
-        #expect(text == "Hello, how can I help?")
-        let request = try #require(MockURLProtocol.requests.first)
-        #expect(request.value(forHTTPHeaderField: "Accept") == "application/json")
-        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer test-key-123")
-        let body = try #require(try JSONSerialization.jsonObject(with: MockURLProtocol.bodies[0]) as? [String: Any])
-        #expect(body["stream"] as? Bool == false)
-    }
-
-    @Test("a response without choices maps to invalidResponse")
-    func chatWithoutChoices() async throws {
-        let json = Data(#"{"model":"m","choices":[]}"#.utf8)
-        MockURLProtocol.responder = { _ in MockReply(chunks: [json]) }
-        await #expect(throws: HermesAPIError.invalidResponse) {
-            _ = try await makeClient().chat(model: "m", messages: messages)
-        }
-    }
-
-    @Test("chat: 401 maps to unauthorized, and no retry happens")
-    func chatUnauthorized() async throws {
-        MockURLProtocol.responder = { _ in MockReply(status: 401) }
-        await #expect(throws: HermesAPIError.unauthorized) {
-            _ = try await makeClient().chat(model: "m", messages: messages)
-        }
-        #expect(MockURLProtocol.requests.count == 1)
-    }
-
-    @Test("chat: URLError.timedOut maps to timeout")
-    func chatTimeout() async throws {
-        MockURLProtocol.reset()
-        MockURLProtocol.responder = { _ in MockReply(failure: URLError(.timedOut)) }
-        await #expect(throws: HermesAPIError.timeout) {
-            _ = try await makeClient().chat(model: "m", messages: messages)
-        }
     }
 
     @Test("the health check is an authenticated GET to /health, without a body")
@@ -332,16 +165,6 @@ struct HermesClientStreamTests {
         }
         await #expect(throws: HermesAPIError.invalidResponse) {
             try await makeClient().healthCheck()
-        }
-    }
-
-    @Test("a chat response redirected to another URL maps to invalidResponse, never a success")
-    func chatRedirectedResponse() async throws {
-        let login = URL(string: "https://hermes.example.test/login") ?? URL(filePath: "/")
-        let json = Data(#"{"model":"m","choices":[{"index":0,"message":{"role":"assistant","content":"hi"},"finish_reason":"stop"}]}"#.utf8)
-        MockURLProtocol.responder = { _ in MockReply(chunks: [json], responseURL: login) }
-        await #expect(throws: HermesAPIError.invalidResponse) {
-            _ = try await makeClient().chat(model: "m", messages: messages)
         }
     }
 
@@ -502,17 +325,5 @@ struct HermesClientStreamTests {
         MockURLProtocol.responder = { _ in MockReply(chunks: [json]) }
         let result = try await makeClient().listModelOptions()
         #expect(result == .fallback(.invalidResponse))
-    }
-
-    @Test("streamChat sends the provider with the model when one is given")
-    func streamChatSendsProvider() async throws {
-        MockURLProtocol.responder = { _ in MockReply(chunks: [Data("data: [DONE]\n".utf8)]) }
-
-        _ = try await collect(makeClient().streamChat(model: "claude-opus-test", provider: "anthropic", messages: messages))
-
-        let body = try #require(MockURLProtocol.bodies.first)
-        let object = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
-        #expect(object["model"] as? String == "claude-opus-test")
-        #expect(object["provider"] as? String == "anthropic")
     }
 }

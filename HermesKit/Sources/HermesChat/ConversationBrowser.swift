@@ -9,16 +9,6 @@ import HermesStore
 /// The title shown for a conversation the instance has not named yet.
 public enum ConversationTitle {
     public static let placeholder = "New conversation"
-
-    /// A title taken from the first message: its first line, trimmed, and cut to `limit` characters.
-    public static func derive(from text: String, limit: Int = 40) -> String {
-        let firstLine = text.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
-        let trimmed = firstLine.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return placeholder }
-        guard trimmed.count > limit else { return trimmed }
-        let cut = trimmed.prefix(limit).trimmingCharacters(in: .whitespacesAndNewlines)
-        return cut + "…"
-    }
 }
 
 /// The conversation list and the open conversation.

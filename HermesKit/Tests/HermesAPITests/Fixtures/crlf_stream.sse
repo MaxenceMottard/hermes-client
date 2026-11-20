@@ -1,4 +1,0 @@
-data: {"id":"c2","choices":[{"index":0,"delta":{"content":"A"}}]}
-
-: CRLF comment
-data: [DONE]
