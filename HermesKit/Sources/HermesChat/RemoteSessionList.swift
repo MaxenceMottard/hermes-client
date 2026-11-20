@@ -93,6 +93,7 @@ public final class RemoteSessionList {
         let transcript = RemoteTranscript(
             sessionID: session.id,
             title: session.title,
+            model: session.model,
             source: source,
             acceptsMessages: session.acceptsAPIMessages
         )

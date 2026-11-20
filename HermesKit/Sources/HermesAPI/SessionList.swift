@@ -27,6 +27,8 @@ public struct RemoteSession: Sendable, Equatable, Identifiable, Decodable {
     /// Where the session was created: `api_server` for this app and other API clients, `local` for the
     /// web dashboard, `tui`, `cli`, a messaging platform, and so on. `nil` when the instance does not say.
     public let source: String?
+    /// The model the session runs on, as the instance names it. `nil` when the instance does not say.
+    public let model: String?
 
     public init(
         id: String,
@@ -37,7 +39,8 @@ public struct RemoteSession: Sendable, Equatable, Identifiable, Decodable {
         lastActive: Date? = nil,
         pinned: Bool = false,
         archived: Bool = false,
-        source: String? = nil
+        source: String? = nil,
+        model: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -48,6 +51,7 @@ public struct RemoteSession: Sendable, Equatable, Identifiable, Decodable {
         self.pinned = pinned
         self.archived = archived
         self.source = source
+        self.model = model
     }
 
     /// Whether the API accepts new messages in this session. The instance refuses API messages in a
@@ -65,7 +69,7 @@ public struct RemoteSession: Sendable, Equatable, Identifiable, Decodable {
         case messageCount = "message_count"
         case startedAt = "started_at"
         case lastActive = "last_active"
-        case pinned, archived, source
+        case pinned, archived, source, model
     }
 
     public init(from decoder: any Decoder) throws {
@@ -80,6 +84,7 @@ public struct RemoteSession: Sendable, Equatable, Identifiable, Decodable {
         pinned = Self.flag(in: container, forKey: .pinned)
         archived = Self.flag(in: container, forKey: .archived)
         source = try container.decodeIfPresent(String.self, forKey: .source)
+        model = try container.decodeIfPresent(String.self, forKey: .model)
     }
 
     /// The instance stores flags as SQLite integers (0/1); booleans are accepted too.

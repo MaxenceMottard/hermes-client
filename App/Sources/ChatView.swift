@@ -49,6 +49,7 @@ struct ChatView: View {
                     pendingImages: pending.attachments,
                     onRemoveImage: removeImage,
                     onAdd: { isAddingImages = true },
+                    model: session.modelChoice,
                     isBusy: session.isBusy,
                     canSend: canSend,
                     onSend: send,

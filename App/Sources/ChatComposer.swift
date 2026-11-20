@@ -1,4 +1,5 @@
 import HermesAPI
+import HermesChat
 import SwiftUI
 
 /// The message composer floating over the bottom of a conversation: a rounded glass card with the
@@ -13,6 +14,8 @@ struct ChatComposer: View {
     var onRemoveImage: (Int) -> Void = { _ in }
     /// Opens the add sheet. `nil` hides the add button.
     var onAdd: (() -> Void)?
+    /// The model of the conversation, shown next to the add button. `nil` shows nothing.
+    var model: ModelChoice?
     let isBusy: Bool
     let canSend: Bool
     let onSend: () -> Void
@@ -49,6 +52,10 @@ struct ChatComposer: View {
                         .disabled(isBusy)
                 }
 
+                if let model {
+                    ModelBadge(model: model)
+                }
+
                 Spacer(minLength: 0)
 
                 if isBusy {
@@ -72,6 +79,30 @@ struct ChatComposer: View {
         .glassEffect(.regular, in: .rect(cornerRadius: 28))
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
+    }
+}
+
+/// The model of the conversation, in a capsule: the model name, then its provider in a lighter tone.
+/// The model is fixed when a conversation starts, so the badge is not a button.
+private struct ModelBadge: View {
+    let model: ModelChoice
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Text(model.model)
+            if let provider = model.provider {
+                Text(provider)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .font(.subheadline)
+        .lineLimit(1)
+        .truncationMode(.middle)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .glassEffect(.regular, in: .capsule)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Model: \(model.displayName)")
     }
 }
 
