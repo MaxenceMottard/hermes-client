@@ -44,6 +44,13 @@ struct ChatView: View {
                 TextField("Message", text: $draft, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
                     .lineLimit(1 ... 5)
+                    // The multi-line field can consume ⌘↩ before the menu sees it: handle it here too.
+                    // The second path is a no-op, because sending clears the draft synchronously.
+                    .onKeyPress(.return, phases: .down) { press in
+                        guard press.modifiers.contains(.command) else { return .ignored }
+                        onCommand(.send)
+                        return .handled
+                    }
 
                 if session.isBusy {
                     Button("Stop", systemImage: "stop.circle.fill") {
