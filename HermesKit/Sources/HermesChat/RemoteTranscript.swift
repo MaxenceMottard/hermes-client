@@ -27,11 +27,6 @@ public struct TranscriptLine: Identifiable, Equatable, Sendable {
         self.date = date
         self.images = images
     }
-
-    /// The line as a message row shows it.
-    public var message: ChatMessage {
-        ChatMessage(role: role, content: text, images: images)
-    }
 }
 
 /// A conversation: the messages of a session stored on the Hermes instance, and a way to continue it.

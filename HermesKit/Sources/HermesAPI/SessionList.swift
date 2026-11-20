@@ -18,12 +18,9 @@ public struct SessionPage: Sendable, Equatable {
 public struct RemoteSession: Sendable, Equatable, Identifiable, Decodable {
     public let id: String
     public let title: String?
-    public let preview: String?
-    public let messageCount: Int?
     public let startedAt: Date?
     public let lastActive: Date?
     public let pinned: Bool
-    public let archived: Bool
     /// Where the session was created: `api_server` for this app and other API clients, `local` for the
     /// web dashboard, `tui`, `cli`, a messaging platform, and so on. `nil` when the instance does not say.
     public let source: String?
@@ -33,23 +30,17 @@ public struct RemoteSession: Sendable, Equatable, Identifiable, Decodable {
     public init(
         id: String,
         title: String? = nil,
-        preview: String? = nil,
-        messageCount: Int? = nil,
         startedAt: Date? = nil,
         lastActive: Date? = nil,
         pinned: Bool = false,
-        archived: Bool = false,
         source: String? = nil,
         model: String? = nil
     ) {
         self.id = id
         self.title = title
-        self.preview = preview
-        self.messageCount = messageCount
         self.startedAt = startedAt
         self.lastActive = lastActive
         self.pinned = pinned
-        self.archived = archived
         self.source = source
         self.model = model
     }
@@ -65,24 +56,20 @@ public struct RemoteSession: Sendable, Equatable, Identifiable, Decodable {
     public static let apiSource = "api_server"
 
     private enum CodingKeys: String, CodingKey {
-        case id, title, preview
-        case messageCount = "message_count"
+        case id, title
         case startedAt = "started_at"
         case lastActive = "last_active"
-        case pinned, archived, source, model
+        case pinned, source, model
     }
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
         title = try container.decodeIfPresent(String.self, forKey: .title)
-        preview = try container.decodeIfPresent(String.self, forKey: .preview)
-        messageCount = try container.decodeIfPresent(Int.self, forKey: .messageCount)
         // The instance sends Unix timestamps in seconds.
         startedAt = try container.decodeIfPresent(Double.self, forKey: .startedAt).map(Date.init(timeIntervalSince1970:))
         lastActive = try container.decodeIfPresent(Double.self, forKey: .lastActive).map(Date.init(timeIntervalSince1970:))
         pinned = Self.flag(in: container, forKey: .pinned)
-        archived = Self.flag(in: container, forKey: .archived)
         source = try container.decodeIfPresent(String.self, forKey: .source)
         model = try container.decodeIfPresent(String.self, forKey: .model)
     }

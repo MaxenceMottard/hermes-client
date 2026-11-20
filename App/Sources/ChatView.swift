@@ -40,7 +40,7 @@ struct ChatView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 24) {
                     ForEach(transcript.lines) { line in
-                        MessageRow(message: line.message)
+                        MessageRow(line: line)
                     }
                 }
                 .scrollTargetLayout()
@@ -283,16 +283,16 @@ private extension ChatView {
 /// One message of a conversation. A reply is laid out straight on the page, full width, without a
 /// background; a message from the user sits in a rounded bubble on the right, with its photos above it.
 struct MessageRow: View {
-    let message: ChatMessage
+    let line: TranscriptLine
 
-    private var isUser: Bool { message.role == "user" }
+    private var isUser: Bool { line.role == "user" }
 
     var body: some View {
         if isUser {
             VStack(alignment: .trailing, spacing: 6) {
                 images
-                if !message.content.isEmpty {
-                    Text(message.content)
+                if !line.text.isEmpty {
+                    Text(line.text)
                         .textSelection(.enabled)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 12)
@@ -304,7 +304,7 @@ struct MessageRow: View {
         } else {
             VStack(alignment: .leading, spacing: 6) {
                 images
-                MarkdownView(source: message.content)
+                MarkdownView(source: line.text)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -312,10 +312,10 @@ struct MessageRow: View {
 
     @ViewBuilder
     private var images: some View {
-        if !message.images.isEmpty {
+        if !line.images.isEmpty {
             ScrollView(.horizontal) {
                 HStack(spacing: 6) {
-                    ForEach(Array(message.images.enumerated()), id: \.offset) { _, image in
+                    ForEach(Array(line.images.enumerated()), id: \.offset) { _, image in
                         AttachmentThumbnail(data: image.data)
                     }
                 }
