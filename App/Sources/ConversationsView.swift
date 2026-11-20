@@ -13,7 +13,7 @@ struct ConversationsView: View {
                 .toolbar {
                     ToolbarItem(placement: .primaryAction) {
                         Button("New conversation", systemImage: "square.and.pencil") {
-                            try? browser.createConversation()
+                            _ = try? browser.createConversation()
                         }
                     }
                 }
@@ -21,7 +21,7 @@ struct ConversationsView: View {
             if let session = browser.session {
                 ChatView(session: session)
                     .navigationTitle(currentTitle)
-                    .navigationBarTitleDisplayMode(.inline)
+                    .inlineNavigationTitle()
             }
         }
         .onChange(of: browser.session?.phase) {
