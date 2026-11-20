@@ -18,10 +18,18 @@ struct ConversationsView: View {
                     }
                 }
         } detail: {
-            ConversationDetailView(browser: browser)
+            if let session = browser.session {
+                ChatView(session: session)
+                    .navigationTitle(currentTitle)
+                    .navigationBarTitleDisplayMode(.inline)
+            }
         }
         .onChange(of: browser.session?.phase) {
             browser.refresh()
         }
+    }
+
+    private var currentTitle: String {
+        browser.summaries.first { $0.id == browser.selectedID }?.title ?? ConversationTitle.placeholder
     }
 }
