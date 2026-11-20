@@ -19,11 +19,24 @@ struct ConnectionSettingsTests {
         #expect(ConnectionSettings.parseBaseURL("https://") == nil)
     }
 
-    @Test("settings are valid only with a URL and a non-empty model")
+    @Test("settings are valid only with an http or https URL")
     func validity() {
-        #expect(ConnectionSettings(baseURLString: "https://hermes.example.test", model: "m").isValid)
-        #expect(!ConnectionSettings(baseURLString: "https://hermes.example.test", model: "  ").isValid)
-        #expect(!ConnectionSettings(baseURLString: "nope", model: "m").isValid)
+        #expect(ConnectionSettings(baseURLString: "https://hermes.example.test").isValid)
+        #expect(!ConnectionSettings(baseURLString: "nope").isValid)
+    }
+
+    @Test("settings saved with a model by an older version still load")
+    func loadsLegacySettings() throws {
+        let suite = "test.connection.legacy.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(
+            Data(#"{"baseURLString":"https://hermes.example.test","model":"hermes-agent"}"#.utf8),
+            forKey: "connectionSettings")
+
+        let loaded = UserDefaultsSettingsStorage(defaults: defaults).load()
+
+        #expect(loaded == ConnectionSettings(baseURLString: "https://hermes.example.test"))
     }
 
     @Test("the storage round-trips settings and returns nil when empty")
@@ -34,7 +47,7 @@ struct ConnectionSettingsTests {
         let storage = UserDefaultsSettingsStorage(defaults: defaults)
 
         #expect(storage.load() == nil)
-        let settings = ConnectionSettings(baseURLString: "https://hermes.example.test", model: "agent")
+        let settings = ConnectionSettings(baseURLString: "https://hermes.example.test")
         storage.save(settings)
         #expect(storage.load() == settings)
     }

@@ -11,6 +11,9 @@ public struct ModelChoice: Hashable, Sendable {
         self.provider = provider
     }
 
+    /// The gateway's virtual model: the instance answers with the model it is configured to use.
+    public static let instanceDefault = ModelChoice(model: "hermes-agent")
+
     /// `provider · model`, or the model alone when there is no provider.
     public var displayName: String {
         Self.displayName(model: model, provider: provider)

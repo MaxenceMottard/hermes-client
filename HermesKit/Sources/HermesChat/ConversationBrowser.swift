@@ -39,7 +39,8 @@ public final class ConversationBrowser {
 
     private let store: any ConversationStore
     private let service: any ChatService
-    /// Model given to new conversations, and used by conversations saved without a model.
+    /// Model given to new conversations when none is chosen or remembered, and used by conversations saved
+    /// without a model. `hermes-agent` (the default) lets the instance pick.
     private let model: String
     private let lastModel: (any LastModelStorage)?
 
@@ -48,7 +49,7 @@ public final class ConversationBrowser {
     public init(
         store: any ConversationStore,
         service: any ChatService,
-        model: String,
+        model: String = ModelChoice.instanceDefault.model,
         remoteSessions: RemoteSessionList? = nil,
         lastModel: (any LastModelStorage)? = nil
     ) {
@@ -72,7 +73,7 @@ public final class ConversationBrowser {
         }
     }
 
-    /// The instance's default model, with no provider: the one set in the settings.
+    /// The default model, with no provider: `hermes-agent` unless the browser was built with another one.
     public var defaultChoice: ModelChoice {
         ModelChoice(model: model)
     }

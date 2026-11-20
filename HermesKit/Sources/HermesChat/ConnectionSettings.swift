@@ -1,13 +1,14 @@
 import Foundation
 
 /// Non-secret connection settings. The API key is stored separately, in a `SecretStore`.
+///
+/// There is no model here: each conversation picks its own (see `ModelChoice`). Settings saved by older
+/// versions also hold a `model` key; decoding ignores it.
 public struct ConnectionSettings: Codable, Equatable, Sendable {
     public var baseURLString: String
-    public var model: String
 
-    public init(baseURLString: String, model: String) {
+    public init(baseURLString: String) {
         self.baseURLString = baseURLString
-        self.model = model
     }
 
     /// The base URL if the text is an absolute http(s) URL with a host, otherwise `nil`.
@@ -23,9 +24,9 @@ public struct ConnectionSettings: Codable, Equatable, Sendable {
         return url
     }
 
-    /// `true` when the URL parses and the model name is not empty.
+    /// `true` when the URL parses.
     public var isValid: Bool {
-        Self.parseBaseURL(baseURLString) != nil && !model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        Self.parseBaseURL(baseURLString) != nil
     }
 }
 
