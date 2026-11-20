@@ -10,6 +10,8 @@ struct SettingsView: View {
     @State private var model: String
     @State private var apiKey: String
     @State private var errorMessage: String?
+    @State private var isTesting = false
+    @State private var testOutcome: ConnectionTestOutcome?
 
     init(appState: AppState) {
         self.appState = appState
@@ -44,6 +46,19 @@ struct SettingsView: View {
                     Text("Stored on this device. The key gives shell access to the server: never share it.")
                 }
 
+                Section {
+                    Button("Test connection", action: testConnection)
+                        .disabled(isTesting)
+                    if isTesting {
+                        ProgressView()
+                    }
+                    if let testOutcome, let message = testOutcome.message {
+                        Text(message).foregroundStyle(testOutcome == .succeeded ? .green : .red)
+                    }
+                } footer: {
+                    Text("Checks the URL and key typed above. Nothing is saved.")
+                }
+
                 if let errorMessage {
                     Section {
                         Text(errorMessage).foregroundStyle(.red)
@@ -63,6 +78,19 @@ struct SettingsView: View {
     private var canSave: Bool {
         !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Runs the check with the values on screen, which may not be saved yet.
+    private func testConnection() {
+        isTesting = true
+        testOutcome = nil
+        Task {
+            let outcome = await ConnectionTester.run(baseURLString: baseURL, apiKey: apiKey)
+            isTesting = false
+            if outcome != .cancelled {
+                testOutcome = outcome
+            }
+        }
     }
 
     private func save() {
