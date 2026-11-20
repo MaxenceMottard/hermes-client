@@ -14,6 +14,8 @@ struct RemoteChatView: View {
     /// Set when the reader stops on the oldest shown line; cleared once the older page is in place.
     @State private var loadingOlder = false
     @FocusState private var isComposerFocused: Bool
+    /// `false` while the reader is scrolled away from the newest line: shows the scroll-to-bottom button.
+    @State private var isAtBottom = true
 
     var body: some View {
         VStack(spacing: 0) {
@@ -33,6 +35,7 @@ struct RemoteChatView: View {
             }
             // Before the inset, so a tap on the composer does not hide the keyboard.
             .dismissesKeyboard($isComposerFocused)
+            .tracksScrollBottom($isAtBottom)
             .scrollPosition(id: $scrolledID, anchor: .top)
             // Stopping on the oldest shown line pulls in the next older page.
             .onScrollPhaseChange { _, phase in
@@ -92,6 +95,9 @@ struct RemoteChatView: View {
                         },
                         onStop: { transcript.stop() }
                     )
+                }
+                .scrollToBottomButton(isVisible: !isAtBottom) {
+                    Task { await scrollToNewest() }
                 }
             }
         }

@@ -14,6 +14,9 @@ struct ChatView: View {
     @State private var cameraIDs: [String] = []
     @State private var pending = PendingAttachments<String>()
     @FocusState private var isComposerFocused: Bool
+    @State private var scrollPosition = ScrollPosition(idType: Int.self)
+    /// `false` while the reader is scrolled away from the newest message: shows the scroll-to-bottom button.
+    @State private var isAtBottom = true
 
     var body: some View {
         ScrollView {
@@ -26,6 +29,8 @@ struct ChatView: View {
         }
         // Before the inset, so a tap on the composer does not hide the keyboard.
         .dismissesKeyboard($isComposerFocused)
+        .scrollPosition($scrollPosition)
+        .tracksScrollBottom($isAtBottom)
         // The messages scroll beneath the composer.
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 8) {
@@ -59,6 +64,11 @@ struct ChatView: View {
                     onSend: send,
                     onStop: { session.stop() }
                 )
+            }
+            .scrollToBottomButton(isVisible: !isAtBottom) {
+                withAnimation {
+                    scrollPosition.scrollTo(edge: .bottom)
+                }
             }
         }
         .sheet(isPresented: $isAddingImages) {
