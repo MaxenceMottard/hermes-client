@@ -11,10 +11,8 @@ struct ChatComposer: View {
     /// Images waiting to be sent, shown above the text field.
     var pendingImages: [ImageAttachment] = []
     var onRemoveImage: (Int) -> Void = { _ in }
-    /// Opens the image picker. `nil` hides the add button.
+    /// Opens the add sheet. `nil` hides the add button.
     var onAdd: (() -> Void)?
-    /// Disables the add button, for example when the per-message image limit is reached.
-    var canAdd = true
     let isBusy: Bool
     let canSend: Bool
     let onSend: () -> Void
@@ -48,7 +46,7 @@ struct ChatComposer: View {
                         .buttonStyle(.glass)
                         .buttonBorderShape(.circle)
                         .controlSize(.large)
-                        .disabled(isBusy || !canAdd)
+                        .disabled(isBusy)
                 }
 
                 Spacer(minLength: 0)

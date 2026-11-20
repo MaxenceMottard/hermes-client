@@ -7,9 +7,10 @@ import SwiftUI
 struct ChatView: View {
     let session: ChatSession
     @State private var draft = ""
-    @State private var isPickingPhotos = false
+    @State private var isAddingImages = false
+    /// The photos picked in the add sheet. `pending` follows it.
     @State private var pickerItems: [PhotosPickerItem] = []
-    @State private var pendingImages: [ImageAttachment] = []
+    @State private var pending = PendingAttachments<String>()
 
     var body: some View {
         ScrollView {
@@ -43,10 +44,9 @@ struct ChatView: View {
 
                 ChatComposer(
                     draft: $draft,
-                    pendingImages: pendingImages,
-                    onRemoveImage: { pendingImages.remove(at: $0) },
-                    onAdd: { isPickingPhotos = true },
-                    canAdd: pendingImages.count < ChatSession.maxImagesPerMessage,
+                    pendingImages: pending.attachments,
+                    onRemoveImage: removeImage,
+                    onAdd: { isAddingImages = true },
                     isBusy: session.isBusy,
                     canSend: canSend,
                     onSend: send,
@@ -54,39 +54,46 @@ struct ChatView: View {
                 )
             }
         }
-        .photosPicker(
-            isPresented: $isPickingPhotos,
-            selection: $pickerItems,
-            maxSelectionCount: max(1, ChatSession.maxImagesPerMessage - pendingImages.count),
-            matching: .images
-        )
+        .sheet(isPresented: $isAddingImages) {
+            AddToMessageSheet(selection: $pickerItems, maxSelectionCount: ChatSession.maxImagesPerMessage)
+        }
         .onChange(of: pickerItems) { _, items in
-            Task { await loadPicked(items) }
+            loadPicked(items)
         }
     }
 }
 
 private extension ChatView {
     var canSend: Bool {
-        !pendingImages.isEmpty || !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !pending.isEmpty || !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     func send() {
         let text = draft
-        let images = pendingImages
+        let images = pending.attachments
         draft = ""
-        pendingImages = []
+        pending.clear()
+        pickerItems = []
         Task { await session.send(text, images: images) }
     }
 
-    /// Converts the picked photos and adds them to the composer, up to the per-message limit.
-    func loadPicked(_ items: [PhotosPickerItem]) async {
-        for item in items where pendingImages.count < ChatSession.maxImagesPerMessage {
-            if let attachment = await ImageAttachmentLoader.attachment(from: item) {
-                pendingImages.append(attachment)
+    /// Loads the newly picked photos into the composer and drops the deselected ones.
+    func loadPicked(_ items: [PhotosPickerItem]) {
+        // The shared photo library gives every item an identifier.
+        let toLoad = pending.select(items.compactMap(\.itemIdentifier))
+        for item in items {
+            guard let id = item.itemIdentifier, toLoad.contains(id) else { continue }
+            Task {
+                let attachment = await ImageAttachmentLoader.attachment(from: item)
+                pending.finishLoading(id, attachment: attachment)
             }
         }
-        pickerItems = []
+    }
+
+    func removeImage(at index: Int) {
+        let id = pending.entries[index].id
+        let remaining = Set(pending.remove(id))
+        pickerItems.removeAll { $0.itemIdentifier.map { !remaining.contains($0) } ?? true }
     }
 
     var failureMessage: String? {
