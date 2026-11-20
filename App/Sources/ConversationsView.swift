@@ -2,19 +2,21 @@ import HermesChat
 import SwiftUI
 
 /// Chat tab: a split view with the conversation list and the open conversation.
-/// A new conversation starts on the model chosen in `NewConversationView`.
+/// A new conversation starts on the model chosen in `NewConversationView`, opened by the "+" of the
+/// tab bar on iOS and iPadOS, and by a toolbar button on macOS.
 /// On compact widths the split view collapses into a navigation stack.
 struct ConversationsView: View {
     let browser: ConversationBrowser
     /// Lists the instance models for the new conversation screen. `nil` means the name is typed by hand.
     let modelCatalog: (any ModelCatalog)?
-
-    @State private var isChoosingModel = false
+    /// Whether the new conversation screen is shown. Owned by the root view, whose tab bar opens it.
+    @Binding var isChoosingModel: Bool
 
     var body: some View {
         NavigationSplitView {
             ConversationListView(browser: browser)
                 .navigationTitle("Conversations")
+                #if os(macOS)
                 .toolbar {
                     ToolbarItem(placement: .primaryAction) {
                         Button("New conversation", systemImage: "square.and.pencil") {
@@ -22,6 +24,7 @@ struct ConversationsView: View {
                         }
                     }
                 }
+                #endif
         } detail: {
             if let remote = browser.openedRemote {
                 RemoteChatView(transcript: remote)
