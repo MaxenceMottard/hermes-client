@@ -31,25 +31,3 @@ public final class UserDefaultsLastModelStorage: LastModelStorage, @unchecked Se
         }
     }
 }
-
-/// Non-persistent storage. Used by tests and previews.
-public final class InMemoryLastModelStorage: LastModelStorage, @unchecked Sendable {
-    private let lock = NSLock()
-    private var choice: ModelChoice?
-
-    public init(choice: ModelChoice? = nil) {
-        self.choice = choice
-    }
-
-    public func load() -> ModelChoice? {
-        lock.lock()
-        defer { lock.unlock() }
-        return choice
-    }
-
-    public func save(_ choice: ModelChoice) {
-        lock.lock()
-        defer { lock.unlock() }
-        self.choice = choice
-    }
-}

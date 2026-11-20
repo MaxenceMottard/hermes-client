@@ -18,21 +18,6 @@ public struct ImageAttachment: Sendable, Equatable {
     }
 }
 
-/// A message as a conversation screen shows it. `role` stays a `String` so that roles unknown to the
-/// instance are kept.
-public struct ChatMessage: Sendable, Equatable {
-    public var role: String
-    public var content: String
-    /// Images sent with the message from this device, shown as thumbnails.
-    public var images: [ImageAttachment]
-
-    public init(role: String, content: String, images: [ImageAttachment] = []) {
-        self.role = role
-        self.content = content
-        self.images = images
-    }
-}
-
 /// The `content` of a user message sent to the instance.
 ///
 /// Text alone is encoded as a plain string. With images, it is an array of `text` and `image_url`

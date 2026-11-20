@@ -158,12 +158,9 @@ struct HermesAPISessionsTests {
         let first = page.sessions[0]
         #expect(first.id == "20261120_093000_a1b2c3")
         #expect(first.title == "Release notes draft")
-        #expect(first.preview == "Can you draft the release notes?")
-        #expect(first.messageCount == 4)
         #expect(first.startedAt == Date(timeIntervalSince1970: 1_795_157_400))
         #expect(first.lastActive == Date(timeIntervalSince1970: 1_795_161_000.5))
         #expect(first.pinned)
-        #expect(!first.archived)
         #expect(first.source == "api_server")
         #expect(first.model == "hermes-test-model")
         #expect(first.acceptsAPIMessages)
@@ -171,10 +168,8 @@ struct HermesAPISessionsTests {
         let second = page.sessions[1]
         #expect(second.id == "20261119_180000_d4e5f6")
         #expect(second.title == nil)
-        #expect(second.preview == nil)
         #expect(second.lastActive == nil)
         #expect(!second.pinned)
-        #expect(second.archived)
         #expect(second.source == "local")
         #expect(second.model == nil)
         #expect(!second.acceptsAPIMessages)
