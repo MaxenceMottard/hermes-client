@@ -13,6 +13,7 @@ struct ChatView: View {
     /// Ids of the photos taken with the camera, in the order taken. They are not part of the picker selection.
     @State private var cameraIDs: [String] = []
     @State private var pending = PendingAttachments<String>()
+    @FocusState private var isComposerFocused: Bool
 
     var body: some View {
         ScrollView {
@@ -23,6 +24,8 @@ struct ChatView: View {
             }
             .padding()
         }
+        // Before the inset, so a tap on the composer does not hide the keyboard.
+        .dismissesKeyboard($isComposerFocused)
         // The messages scroll beneath the composer.
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 8) {
@@ -46,6 +49,7 @@ struct ChatView: View {
 
                 ChatComposer(
                     draft: $draft,
+                    isFocused: $isComposerFocused,
                     pendingImages: pending.attachments,
                     onRemoveImage: removeImage,
                     onAdd: { isAddingImages = true },

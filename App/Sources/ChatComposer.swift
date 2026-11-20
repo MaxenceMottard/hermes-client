@@ -9,6 +9,8 @@ import SwiftUI
 /// no `onAdd`, which hides the add button.
 struct ChatComposer: View {
     @Binding var draft: String
+    /// Focus of the text field: the conversation screen clears it to hide the keyboard.
+    var isFocused: FocusState<Bool>.Binding
     /// Images waiting to be sent, shown above the text field.
     var pendingImages: [ImageAttachment] = []
     var onRemoveImage: (Int) -> Void = { _ in }
@@ -41,6 +43,7 @@ struct ChatComposer: View {
             }
 
             TextField("Message", text: $draft, axis: .vertical)
+                .focused(isFocused)
                 .textFieldStyle(.plain)
                 .lineLimit(1 ... 6)
                 .padding(.horizontal, 6)
