@@ -6,11 +6,13 @@ import SwiftUI
 /// Sidebar: one list of the conversations on this device and the sessions on the Hermes instance,
 /// most recently used first, one line per entry (an icon for its kind and the title). Local
 /// conversations open and can be renamed or deleted. A remote session opens read-only in the detail pane.
+/// A search field narrows the list by title.
 struct ConversationListView: View {
     let browser: ConversationBrowser
 
     @State private var renamingID: UUID?
     @State private var draftTitle = ""
+    @State private var query = ""
 
     var body: some View {
         List(selection: selection) {
@@ -29,6 +31,15 @@ struct ConversationListView: View {
             if let remote = browser.remoteSessions {
                 RemoteStatusRows(list: remote)
                     .listRowSeparator(.hidden)
+            }
+        }
+        .searchable(text: $query, prompt: "Search")
+        #if os(iOS)
+            .searchToolbarBehavior(.minimize)
+        #endif
+        .overlay {
+            if entries.isEmpty, !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                ContentUnavailableView.search(text: query)
             }
         }
         .task {
@@ -51,11 +62,14 @@ struct ConversationListView: View {
         }
     }
 
+    /// The merged list, narrowed to the titles that match the search query (case and accents ignored).
+    /// The search covers the remote sessions loaded so far.
     private var entries: [SidebarEntry] {
-        SidebarEntry.merged(
+        let all = SidebarEntry.merged(
             local: browser.summaries,
             remote: browser.remoteSessions?.sessions ?? []
         )
+        return SidebarEntry.filtered(all, matching: query)
     }
 
     /// One line: the icon of the entry kind and its title, truncated at the end.
