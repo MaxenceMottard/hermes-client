@@ -82,12 +82,15 @@ public struct HermesClient: Sendable {
         }
     }
 
-    /// Sends one text message to a session stored on the instance and streams the reply events, in order.
+    /// Sends one message to a session stored on the instance and streams the reply events, in order.
+    /// `images` go with the text as `image_url` parts (see `MessageContent`).
     ///
     /// `POST {baseURL}/api/sessions/{id}/chat/stream`. The stream finishes on `done` or at the end of the
     /// response. Cancelling the consuming task, or leaving the loop, cancels the request. The request is
     /// never retried automatically.
-    public func streamSessionChat(sessionID: String, message: String) -> AsyncThrowingStream<SessionChatEvent, any Error> {
+    public func streamSessionChat(
+        sessionID: String, message: String, images: [ImageAttachment] = []
+    ) -> AsyncThrowingStream<SessionChatEvent, any Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
@@ -100,7 +103,9 @@ public struct HermesClient: Sendable {
                         path: HermesAPIPaths.sessionChatStream(sessionID),
                         accept: "text/event-stream"
                     )
-                    request.httpBody = try JSONEncoder().encode(SessionChatRequest(message: message))
+                    request.httpBody = try JSONEncoder().encode(
+                        SessionChatRequest(message: MessageContent(text: message, images: images))
+                    )
                     #if canImport(Darwin)
                         let (bytes, response) = try await session.bytes(for: request)
                         try Self.validate(response, requestURL: request.url)
@@ -339,13 +344,79 @@ public struct HermesClient: Sendable {
             request.httpBody = Data("{}".utf8)
             let (data, response) = try await session.data(for: request)
             try Self.validate(response, requestURL: request.url)
-            return try JSONDecoder().decode(SessionForkBody.self, from: data).session
+            return try JSONDecoder().decode(SessionBody.self, from: data).session
         } catch is CancellationError {
             throw CancellationError()
         } catch let error as URLError where error.code == .cancelled {
             throw CancellationError()
         } catch {
             throw HermesAPIError.from(error)
+        }
+    }
+
+    /// Creates an empty session owned by the API, from `POST {baseURL}/api/sessions`, and returns it.
+    ///
+    /// With a `model`, the session is locked on it (and on `provider` when given): every turn runs on that
+    /// model. Without one, the instance picks its default model. The request is never retried automatically.
+    public func createSession(model: String? = nil, provider: String? = nil) async throws -> RemoteSession {
+        try await sessionRequest(
+            method: "POST",
+            path: HermesAPIPaths.sessions,
+            body: JSONEncoder().encode(SessionCreateRequest(model: model, provider: provider))
+        )
+    }
+
+    /// Renames a session, from `PATCH {baseURL}/api/sessions/{id}`, and returns the updated session.
+    public func renameSession(sessionID: String, title: String) async throws -> RemoteSession {
+        try Self.checkPathSegment(sessionID)
+        return try await sessionRequest(
+            method: "PATCH",
+            path: HermesAPIPaths.session(sessionID),
+            body: JSONEncoder().encode(SessionRenameRequest(title: title))
+        )
+    }
+
+    /// Deletes a session and its messages, from `DELETE {baseURL}/api/sessions/{id}`.
+    ///
+    /// The instance refuses to delete a session while one of its turns runs (`409`).
+    public func deleteSession(sessionID: String) async throws {
+        do {
+            try Self.checkPathSegment(sessionID)
+            let request = makeRequest(
+                method: "DELETE", path: HermesAPIPaths.session(sessionID), accept: "application/json"
+            )
+            let (_, response) = try await session.data(for: request)
+            try Self.validate(response, requestURL: request.url)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as URLError where error.code == .cancelled {
+            throw CancellationError()
+        } catch {
+            throw HermesAPIError.from(error)
+        }
+    }
+
+    /// Sends `body` as JSON and decodes the session the instance returns (`{"session": {...}}`).
+    private func sessionRequest(method: String, path: String, body: Data) async throws -> RemoteSession {
+        do {
+            var request = makeRequest(method: method, path: path, accept: "application/json")
+            request.httpBody = body
+            let (data, response) = try await session.data(for: request)
+            try Self.validate(response, requestURL: request.url)
+            return try JSONDecoder().decode(SessionBody.self, from: data).session
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as URLError where error.code == .cancelled {
+            throw CancellationError()
+        } catch {
+            throw HermesAPIError.from(error)
+        }
+    }
+
+    /// A session id goes into the path as is: it must be a single, non-empty segment.
+    private static func checkPathSegment(_ sessionID: String) throws {
+        guard !sessionID.isEmpty, !sessionID.contains("/") else {
+            throw HermesAPIError.invalidResponse
         }
     }
 
@@ -404,7 +475,7 @@ public struct HermesClient: Sendable {
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.timeoutInterval = configuration.timeout
-        if method == "POST" {
+        if method == "POST" || method == "PATCH" {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
         request.setValue(accept, forHTTPHeaderField: "Accept")

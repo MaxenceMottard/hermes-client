@@ -19,13 +19,20 @@ public struct SessionMessagesPage: Sendable, Equatable {
 public struct SessionMessage: Sendable, Equatable, Identifiable, Decodable {
     public let id: String
     public let role: String
-    /// `nil` or empty for rows that carry no text, such as tool calls or compaction markers.
+    /// `nil` or empty for rows that carry no text, such as tool calls or compaction markers. For a message
+    /// stored as `text` and `image_url` parts, the text parts joined by new lines.
     public let content: String?
     public let timestamp: Date?
     /// `"hidden"` marks rows the instance wants clients not to display.
     public let displayKind: String?
 
-    public init(id: String, role: String, content: String?, timestamp: Date? = nil, displayKind: String? = nil) {
+    public init(
+        id: String,
+        role: String,
+        content: String?,
+        timestamp: Date? = nil,
+        displayKind: String? = nil
+    ) {
         self.id = id
         self.role = role
         self.content = content
@@ -47,9 +54,34 @@ public struct SessionMessage: Sendable, Equatable, Identifiable, Decodable {
             id = String(try container.decode(Int.self, forKey: .id))
         }
         role = try container.decodeIfPresent(String.self, forKey: .role) ?? ""
-        content = try container.decodeIfPresent(String.self, forKey: .content)
+        // A string, or an array of `text` and `image_url` parts (a multimodal message). Anything else
+        // carries nothing to show.
+        if let text = try? container.decodeIfPresent(String.self, forKey: .content) {
+            content = text
+        } else if let parts = try? container.decodeIfPresent([ContentPartBody].self, forKey: .content) {
+            let texts = parts.compactMap { $0.type == "text" ? $0.text : nil }
+            content = texts.isEmpty ? nil : texts.joined(separator: "\n")
+        } else {
+            content = nil
+        }
         timestamp = try container.decodeIfPresent(Double.self, forKey: .timestamp).map(Date.init(timeIntervalSince1970:))
         displayKind = try container.decodeIfPresent(String.self, forKey: .displayKind)
+    }
+}
+
+/// One part of a multimodal message content. Unknown part types keep only their `type`.
+private struct ContentPartBody: Decodable {
+    let type: String
+    let text: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case type, text
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        type = (try? container.decode(String.self, forKey: .type)) ?? ""
+        text = try? container.decodeIfPresent(String.self, forKey: .text)
     }
 }
 

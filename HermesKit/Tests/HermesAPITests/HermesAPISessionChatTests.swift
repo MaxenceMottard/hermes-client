@@ -136,4 +136,45 @@ extension HermesAPISessionsTests {
             for try await _ in makeClient().streamSessionChat(sessionID: "s", message: "Hi") {}
         }
     }
+
+    @Test("images go in the message as image_url parts after the text")
+    func chatSendsImages() async throws {
+        SessionsURLProtocol.responder = { _ in SessionsReply(body: try! chatFixture()) }
+        let image = try #require(ImageAttachment(mimeType: "image/png", data: Data("abc".utf8)))
+
+        for try await _ in makeClient().streamSessionChat(sessionID: "s", message: "Look", images: [image]) {}
+
+        let body = try #require(
+            try JSONSerialization.jsonObject(with: SessionsURLProtocol.bodies.first ?? Data()) as? [String: Any]
+        )
+        let parts = try #require(body["message"] as? [[String: Any]])
+        #expect(parts.map { $0["type"] as? String } == ["text", "image_url"])
+    }
+
+    @Test("an event the transcript does not show, such as tool progress, does not end or break the stream")
+    func toolEventsAreSkipped() async throws {
+        let stream = """
+        event: tool.started
+        data: {"tool_name":"terminal","preview":"ls"}
+
+        event: tool.progress
+        data: {"delta":"thinking"}
+
+        event: assistant.delta
+        data: {"delta":"Done"}
+
+        event: done
+        data: {}
+
+
+        """
+        SessionsURLProtocol.responder = { _ in SessionsReply(body: Data(stream.utf8)) }
+
+        var events: [SessionChatEvent] = []
+        for try await event in makeClient().streamSessionChat(sessionID: "s", message: "Hi") {
+            events.append(event)
+        }
+
+        #expect(events == [.delta("Done")])
+    }
 }

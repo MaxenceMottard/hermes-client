@@ -5,36 +5,50 @@ import HermesAPI
     import Observation
 #endif
 
-/// One message of a transcript: a user or assistant message with text, ready to show.
+/// One message of a transcript: a user or assistant message, ready to show.
 public struct TranscriptLine: Identifiable, Equatable, Sendable {
     public let id: String
     public let role: String
     public let text: String
     public let date: Date?
+    /// Images sent from this device with a message of this transcript, shown as thumbnails.
+    public let images: [ImageAttachment]
 
-    public init(id: String, role: String, text: String, date: Date?) {
+    public init(
+        id: String,
+        role: String,
+        text: String,
+        date: Date?,
+        images: [ImageAttachment] = []
+    ) {
         self.id = id
         self.role = role
         self.text = text
         self.date = date
+        self.images = images
+    }
+
+    /// The line as a message row shows it.
+    public var message: ChatMessage {
+        ChatMessage(role: role, content: text, images: images)
     }
 }
 
-/// The messages of a session stored on the Hermes instance, and a way to continue it.
+/// A conversation: the messages of a session stored on the Hermes instance, and a way to continue it.
 ///
-/// Only user and assistant messages with text are kept. Tool, system and compaction rows, and rows the
-/// instance marks as hidden, are dropped. The first page holds the newest messages; each further page holds
-/// older ones and is put above the lines already shown. Pages are requested with an offset counted in
-/// received messages, not in displayed lines.
+/// Only user and assistant messages with text are kept. Tool, system and compaction rows, and
+/// rows the instance marks as hidden, are dropped. The first page holds the newest messages; each further
+/// page holds older ones and is put above the lines already shown. Pages are requested with an offset
+/// counted in received messages, not in displayed lines.
 ///
-/// `send(_:)` posts a message to the session and shows the reply as it streams. Its lines live only in
-/// this object until the transcript is loaded again.
+/// `send(_:images:)` posts a message to the session and shows the reply as it streams. Its lines live only
+/// in this object until the transcript is loaded again.
 ///
 /// The instance refuses API messages in a session created elsewhere (web dashboard, TUI). For such a
-/// session the first `send(_:)` forks it into an API session, which holds the same messages, and the
-/// transcript continues in the fork: `activeSessionID` changes, `sessionID` does not.
+/// session the first `send(_:images:)` forks it into an API session, which holds the same messages, and
+/// the transcript continues in the fork: `activeSessionID` changes, `sessionID` does not.
 ///
-/// `@Observable` is applied on Apple platforms, see `ChatSession` for why it is left out on Linux.
+/// `@Observable` is applied on Apple platforms, see `RemoteSessionList` for why it is left out on Linux.
 @MainActor
 #if !os(Linux)
     @Observable
@@ -49,23 +63,31 @@ public final class RemoteTranscript: Identifiable {
 
     /// Page size requested from the instance.
     public static let pageSize = 200
+    /// Most images one message can carry.
+    public static let maxImagesPerMessage = 4
 
     /// The session this transcript was opened on. Stays the same after a fork.
     public nonisolated let sessionID: String
-    public nonisolated let title: String?
+    /// The title of the session. It changes when the instance names a new session or the user renames it.
+    public private(set) var title: String?
     /// The model the session runs on, or `nil` when the instance does not say.
-    public nonisolated let model: String?
+    public nonisolated let model: ModelChoice?
     /// The session that messages are read from and sent to: `sessionID`, or its fork once one was made.
     public private(set) var activeSessionID: String
-    /// `false` while the active session refuses API messages: the next `send(_:)` forks it first.
+    /// `false` while the active session refuses API messages: the next `send(_:images:)` forks it first.
     public private(set) var acceptsMessages: Bool
     /// Called on the main actor with the new session after a fork.
     var onFork: (@MainActor (RemoteSession) -> Void)?
+    /// Called on the main actor when a reply stops streaming, whatever the outcome. The instance may have
+    /// named the session meanwhile.
+    var onReplyEnded: (@MainActor () -> Void)?
     public private(set) var lines: [TranscriptLine] = []
     public private(set) var state: State = .idle
     public private(set) var hasMore = false
     /// `true` while a reply is streaming.
     public private(set) var isSending = false
+    /// `true` once a message was sent from this transcript.
+    public private(set) var hasSent = false
     /// Why the last message got no reply, or `nil`.
     public private(set) var sendError: String?
 
@@ -79,7 +101,7 @@ public final class RemoteTranscript: Identifiable {
     public init(
         sessionID: String,
         title: String?,
-        model: String? = nil,
+        model: ModelChoice? = nil,
         source: any SessionListing,
         acceptsMessages: Bool = true
     ) {
@@ -92,6 +114,17 @@ public final class RemoteTranscript: Identifiable {
     }
 
     public nonisolated var id: String { sessionID }
+
+    /// Takes the title of `session` when it is the active session and has one.
+    public func update(from session: RemoteSession) {
+        guard session.id == activeSessionID, let newTitle = session.title, !newTitle.isEmpty else { return }
+        title = newTitle
+    }
+
+    /// Marks a session just created in the app: there is nothing to load.
+    func markEmpty() {
+        state = .loaded
+    }
 
     /// Keeps the lines a reader should see, in the order the instance returned them.
     public static func lines(from messages: [SessionMessage]) -> [TranscriptLine] {
@@ -158,22 +191,30 @@ public final class RemoteTranscript: Identifiable {
         await task.value
     }
 
-    /// Sends a message to the session and shows the reply as it streams. The user line appears at once.
-    /// Blank text is ignored, and so is a call made while a reply is still streaming.
-    public func send(_ text: String) async {
+    /// Sends a message, with its images, to the session and shows the reply as it streams. The user line
+    /// appears at once. A message with neither text nor images is ignored, and so is a call made while a
+    /// reply is still streaming. Images past `maxImagesPerMessage` are dropped.
+    public func send(_ text: String, images: [ImageAttachment] = []) async {
         let message = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !message.isEmpty, !isSending else { return }
+        let images = Array(images.prefix(Self.maxImagesPerMessage))
+        guard !message.isEmpty || !images.isEmpty, !isSending else { return }
         isSending = true
+        hasSent = true
         sendError = nil
-        lines.append(TranscriptLine(id: "local-user-\(UUID().uuidString)", role: "user", text: message, date: Date()))
+        lines.append(
+            TranscriptLine(
+                id: "local-user-\(UUID().uuidString)", role: "user", text: message, date: Date(), images: images
+            )
+        )
         let replyID = "local-assistant-\(UUID().uuidString)"
         lines.append(TranscriptLine(id: replyID, role: "assistant", text: "", date: nil))
 
-        let task = Task { await self.stream(message, replyID: replyID) }
+        let task = Task { await self.stream(message, images: images, replyID: replyID) }
         sendTask = task
         await task.value
         sendTask = nil
         isSending = false
+        onReplyEnded?()
     }
 
     /// Stops the reply being streamed. The text received so far stays in the transcript.
@@ -200,13 +241,14 @@ public final class RemoteTranscript: Identifiable {
         }
     }
 
-    private func stream(_ message: String, replyID: String) async {
+    private func stream(_ message: String, images: [ImageAttachment], replyID: String) async {
         guard await forkIfNeeded() else {
             lines.removeAll { $0.id == replyID }
             return
         }
         do {
-            for try await event in await source.streamSessionChat(sessionID: activeSessionID, message: message) {
+            let events = await source.streamSessionChat(sessionID: activeSessionID, message: message, images: images)
+            for try await event in events {
                 switch event {
                 case .delta(let delta):
                     setReply(id: replyID) { $0 + delta }

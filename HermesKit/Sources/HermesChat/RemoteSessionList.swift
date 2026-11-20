@@ -5,22 +5,29 @@ import HermesAPI
     import Observation
 #endif
 
-/// Source of the Hermes session list. `HermesClient` conforms; tests provide a fake.
+/// The session endpoints of a Hermes instance: list, read, create, rename, delete and chat.
+/// `HermesClient` conforms; tests provide a fake.
 public protocol SessionListing: Sendable {
     func listSessions(limit: Int, offset: Int) async throws -> SessionPage
     func listSessionMessages(sessionID: String, limit: Int, offset: Int) async throws -> SessionMessagesPage
-    func streamSessionChat(sessionID: String, message: String) async -> AsyncThrowingStream<SessionChatEvent, any Error>
+    func streamSessionChat(
+        sessionID: String, message: String, images: [ImageAttachment]
+    ) async -> AsyncThrowingStream<SessionChatEvent, any Error>
     func forkSession(sessionID: String) async throws -> RemoteSession
+    func createSession(model: String?, provider: String?) async throws -> RemoteSession
+    func renameSession(sessionID: String, title: String) async throws -> RemoteSession
+    func deleteSession(sessionID: String) async throws
 }
 
 extension HermesClient: SessionListing {}
 
-/// The sessions stored on the Hermes instance, shown next to the local conversations.
+/// The sessions stored on the Hermes instance: every conversation of the app.
 ///
 /// Pages are requested with an offset. The instance back-fills pinned sessions past the limit, so the
 /// offset counts only the unpinned rows received; counting every row would skip some of them.
 ///
-/// `@Observable` is applied on Apple platforms, see `ChatSession` for why it is left out on Linux.
+/// `@Observable` is applied on Apple platforms only: the Observation library does not link with the
+/// Linux toolchain used to run the tests.
 @MainActor
 #if !os(Linux)
     @Observable
@@ -87,13 +94,39 @@ public final class RemoteSessionList {
         }
     }
 
-    /// The messages of one session, loaded on demand by the transcript view. When the transcript moves
+    /// Creates an empty session on the instance and puts it at the top of the list.
+    /// `model` is locked on the session; `nil` lets the instance pick its default model.
+    public func create(model: ModelChoice?) async throws -> RemoteSession {
+        let session = try await source.createSession(model: model?.model, provider: model?.provider)
+        sessions.removeAll { $0.id == session.id }
+        sessions.insert(session, at: 0)
+        return session
+    }
+
+    /// Renames a session on the instance, then updates its row. A blank title is ignored.
+    public func rename(_ sessionID: String, to title: String) async throws {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let renamed = try await source.renameSession(sessionID: sessionID, title: trimmed)
+        replace(sessionID, with: renamed)
+    }
+
+    /// Deletes a session on the instance, then removes its row.
+    public func delete(_ sessionID: String) async throws {
+        try await source.deleteSession(sessionID: sessionID)
+        sessions.removeAll { $0.id == sessionID }
+    }
+
+    /// The messages of one session, loaded on demand by the conversation screen. When the transcript moves
     /// to a fork to accept a message, the fork takes the original's row.
-    public func transcript(for session: RemoteSession) -> RemoteTranscript {
+    ///
+    /// `model` is the model the session was created with in the app, provider included. Without it, the
+    /// transcript shows the model the instance lists for the session.
+    public func transcript(for session: RemoteSession, model: ModelChoice? = nil) -> RemoteTranscript {
         let transcript = RemoteTranscript(
             sessionID: session.id,
             title: session.title,
-            model: session.model,
+            model: model ?? session.model.map { ModelChoice(model: $0) },
             source: source,
             acceptsMessages: session.acceptsAPIMessages
         )
@@ -105,7 +138,7 @@ public final class RemoteSessionList {
 
     /// Puts `session` in place of the row with id `originalID`, or at the top if that row is gone.
     func replace(_ originalID: String, with session: RemoteSession) {
-        sessions.removeAll { $0.id == session.id }
+        sessions.removeAll { $0.id == session.id && $0.id != originalID }
         if let index = sessions.firstIndex(where: { $0.id == originalID }) {
             sessions[index] = session
         } else {
