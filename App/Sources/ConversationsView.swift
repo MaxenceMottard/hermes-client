@@ -1,9 +1,9 @@
 import HermesChat
 import SwiftUI
 
-/// Chat tab: a split view with the conversation list and the open chat.
+/// Chat tab: a split view with the conversation list and the open conversation.
 /// On compact widths the split view collapses into a navigation stack.
-struct ConversationsTab: View {
+struct ConversationsView: View {
     let browser: ConversationBrowser
 
     var body: some View {
@@ -18,18 +18,10 @@ struct ConversationsTab: View {
                     }
                 }
         } detail: {
-            if let session = browser.session {
-                ChatView(session: session)
-                    .navigationTitle(currentTitle)
-                    .navigationBarTitleDisplayMode(.inline)
-            }
+            ConversationDetailView(browser: browser)
         }
         .onChange(of: browser.session?.phase) {
             browser.refresh()
         }
-    }
-
-    private var currentTitle: String {
-        browser.summaries.first { $0.id == browser.selectedID }?.title ?? ConversationTitle.placeholder
     }
 }
