@@ -24,6 +24,9 @@ public struct RemoteSession: Sendable, Equatable, Identifiable, Decodable {
     public let lastActive: Date?
     public let pinned: Bool
     public let archived: Bool
+    /// Where the session was created: `api_server` for this app and other API clients, `local` for the
+    /// web dashboard, `tui`, `cli`, a messaging platform, and so on. `nil` when the instance does not say.
+    public let source: String?
 
     public init(
         id: String,
@@ -33,7 +36,8 @@ public struct RemoteSession: Sendable, Equatable, Identifiable, Decodable {
         startedAt: Date? = nil,
         lastActive: Date? = nil,
         pinned: Bool = false,
-        archived: Bool = false
+        archived: Bool = false,
+        source: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -43,14 +47,25 @@ public struct RemoteSession: Sendable, Equatable, Identifiable, Decodable {
         self.lastActive = lastActive
         self.pinned = pinned
         self.archived = archived
+        self.source = source
     }
+
+    /// Whether the API accepts new messages in this session. The instance refuses API messages in a
+    /// session another surface created (dashboard, TUI, messaging platform) with `permission_denied`:
+    /// such a session must be forked first. A session without a source is assumed to accept them.
+    public var acceptsAPIMessages: Bool {
+        source == nil || source == Self.apiSource
+    }
+
+    /// The source of sessions created through the API.
+    public static let apiSource = "api_server"
 
     private enum CodingKeys: String, CodingKey {
         case id, title, preview
         case messageCount = "message_count"
         case startedAt = "started_at"
         case lastActive = "last_active"
-        case pinned, archived
+        case pinned, archived, source
     }
 
     public init(from decoder: any Decoder) throws {
@@ -64,6 +79,7 @@ public struct RemoteSession: Sendable, Equatable, Identifiable, Decodable {
         lastActive = try container.decodeIfPresent(Double.self, forKey: .lastActive).map(Date.init(timeIntervalSince1970:))
         pinned = Self.flag(in: container, forKey: .pinned)
         archived = Self.flag(in: container, forKey: .archived)
+        source = try container.decodeIfPresent(String.self, forKey: .source)
     }
 
     /// The instance stores flags as SQLite integers (0/1); booleans are accepted too.
@@ -73,6 +89,11 @@ public struct RemoteSession: Sendable, Equatable, Identifiable, Decodable {
         }
         return ((try? container.decodeIfPresent(Int.self, forKey: key)) ?? 0) != 0
     }
+}
+
+/// Body of `POST /api/sessions/{id}/fork`: the new session.
+struct SessionForkBody: Decodable, Sendable {
+    var session: RemoteSession
 }
 
 /// Body of `GET /api/sessions`. Only the fields needed for the list are read.

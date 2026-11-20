@@ -98,16 +98,22 @@ public final class ConversationBrowser {
         guard let remoteSessions else { return }
         selectedID = nil
         self.session = nil
-        // Selecting the open one again keeps its transcript, including a reply in progress.
-        guard openedRemote?.sessionID != session.id else { return }
-        openedRemote = remoteSessions.transcript(for: session)
+        // Selecting the open one again keeps its transcript, including a reply in progress. After a fork the
+        // sidebar row carries the fork's id, which is the transcript's active session.
+        guard openedRemote?.sessionID != session.id, openedRemote?.activeSessionID != session.id else { return }
+        let transcript = remoteSessions.transcript(for: session)
+        openedRemote = transcript
+        // Loaded from here, not only from the view: on iOS 27 the detail view of a collapsed split view
+        // can miss its `.task`, or have it cancelled at once, and the transcript would stay empty.
+        Task { await transcript.load() }
     }
 
     /// The sidebar row currently open, as a `SidebarEntry.id`: the remote session if one is open,
     /// else the local conversation. A single selection drives navigation for both kinds of row.
     public var selectedEntryID: String? {
         if let openedRemote {
-            return SidebarEntry.remoteID(openedRemote.sessionID)
+            // The active session: after a fork the sidebar row carries the fork's id.
+            return SidebarEntry.remoteID(openedRemote.activeSessionID)
         }
         return selectedID.map(SidebarEntry.localID)
     }

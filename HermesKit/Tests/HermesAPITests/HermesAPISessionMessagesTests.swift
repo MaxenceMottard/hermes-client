@@ -13,7 +13,7 @@ extension HermesAPISessionsTests {
         return try Data(contentsOf: url)
     }
 
-    @Test("messages are a GET to /api/sessions/{id}/messages, oldest first, with limit and offset")
+    @Test("messages are a GET to /api/sessions/{id}/messages, newest first, with limit and offset")
     func messagesRequestShape() async throws {
         SessionsURLProtocol.responder = { _ in SessionsReply(body: try! messagesFixture()) }
 
@@ -24,7 +24,7 @@ extension HermesAPISessionsTests {
         #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer test-key-123")
         #expect(
             request.url?.absoluteString
-                == "https://hermes.example.test/api/sessions/20261120_093000_a1b2c3/messages?limit=20&offset=40&order=oldest"
+                == "https://hermes.example.test/api/sessions/20261120_093000_a1b2c3/messages?limit=20&offset=40&order=latest"
         )
     }
 

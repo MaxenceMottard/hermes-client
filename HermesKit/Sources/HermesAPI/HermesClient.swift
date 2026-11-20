@@ -77,6 +77,81 @@ public struct HermesClient: Sendable {
         }
     }
 
+    /// Sends one text message to a session stored on the instance and streams the reply events, in order.
+    ///
+    /// `POST {baseURL}/api/sessions/{id}/chat/stream`. The stream finishes on `done` or at the end of the
+    /// response. Cancelling the consuming task, or leaving the loop, cancels the request. The request is
+    /// never retried automatically.
+    public func streamSessionChat(sessionID: String, message: String) -> AsyncThrowingStream<SessionChatEvent, any Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    // The id goes into the path as is: it must be a single segment.
+                    guard !sessionID.isEmpty, !sessionID.contains("/") else {
+                        throw HermesAPIError.invalidResponse
+                    }
+                    var request = makeRequest(
+                        method: "POST",
+                        path: HermesAPIPaths.sessionChatStream(sessionID),
+                        accept: "text/event-stream"
+                    )
+                    request.httpBody = try JSONEncoder().encode(SessionChatRequest(message: message))
+                    #if canImport(Darwin)
+                        let (bytes, response) = try await session.bytes(for: request)
+                        try Self.validate(response, requestURL: request.url)
+                        try await Self.forEachSessionEvent(in: bytes) { continuation.yield($0) }
+                    #else
+                        // Linux (tests only): URLSession.bytes is unavailable, so the body is buffered.
+                        let (data, response) = try await session.data(for: request)
+                        try Self.validate(response, requestURL: request.url)
+                        let bytes = AsyncThrowingStream<UInt8, any Error> { source in
+                            for byte in data {
+                                source.yield(byte)
+                            }
+                            source.finish()
+                        }
+                        try await Self.forEachSessionEvent(in: bytes) { continuation.yield($0) }
+                    #endif
+                    continuation.finish()
+                } catch is CancellationError {
+                    continuation.finish()
+                } catch let error as URLError where error.code == .cancelled {
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: HermesAPIError.from(error))
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    /// Parses the named events of a session chat stream and emits each one that a transcript shows,
+    /// until `done`.
+    private static func forEachSessionEvent<Bytes: AsyncSequence>(
+        in bytes: Bytes,
+        _ emit: (SessionChatEvent) -> Void
+    ) async throws where Bytes.Element == UInt8 {
+        var parser = SessionEventParser()
+        for try await byte in bytes {
+            for frame in parser.feed(CollectionOfOne(byte)) {
+                if emitSessionEvent(frame, emit) { return }
+            }
+        }
+        for frame in parser.finish() {
+            if emitSessionEvent(frame, emit) { return }
+        }
+    }
+
+    /// Returns `true` once the stream is complete (`done`).
+    private static func emitSessionEvent(_ frame: SessionEventFrame, _ emit: (SessionChatEvent) -> Void) -> Bool {
+        guard let event = SessionChatEvent(frame) else { return false }
+        if event == .finished {
+            return true
+        }
+        emit(event)
+        return false
+    }
+
     /// Parses the byte stream and calls `emit` for each non-empty `delta.content`, until `[DONE]`.
     private static func forEachDelta<Bytes: AsyncSequence>(
         in bytes: Bytes,
@@ -201,10 +276,11 @@ public struct HermesClient: Sendable {
         }
     }
 
-    /// Fetches one page of a session's messages, oldest first, from `GET {baseURL}/api/sessions/{id}/messages`.
+    /// Fetches one page of a session's messages, from `GET {baseURL}/api/sessions/{id}/messages`.
     ///
-    /// `limit` is clamped to 1...500, the maximum the instance accepts; `offset` to 0 or more. `hasMore` is
-    /// true when the page was full. Failures are thrown, as for `listSessions(limit:offset:)`.
+    /// Paging starts from the newest message: `offset` 0 is the last message, and each larger offset goes back
+    /// in time. The page itself is in chronological order, oldest first. `limit` is clamped to 1...500, the
+    /// maximum the instance accepts; `offset` to 0 or more. `hasMore` is true when the page was full. Failures are thrown, as for `listSessions(limit:offset:)`.
     public func listSessionMessages(sessionID: String, limit: Int = 200, offset: Int = 0) async throws -> SessionMessagesPage {
         do {
             // The id goes into the path as is: it must be a single segment.
@@ -215,7 +291,7 @@ public struct HermesClient: Sendable {
             let query = [
                 URLQueryItem(name: "limit", value: String(pageLimit)),
                 URLQueryItem(name: "offset", value: String(max(offset, 0))),
-                URLQueryItem(name: "order", value: "oldest"),
+                URLQueryItem(name: "order", value: "latest"),
             ]
             let request = makeRequest(
                 method: "GET",
@@ -231,6 +307,34 @@ public struct HermesClient: Sendable {
                 messages: body.data,
                 hasMore: body.returned == pageLimit
             )
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as URLError where error.code == .cancelled {
+            throw CancellationError()
+        } catch {
+            throw HermesAPIError.from(error)
+        }
+    }
+
+    /// Copies a session into a new session owned by the API, from `POST {baseURL}/api/sessions/{id}/fork`,
+    /// and returns the new session.
+    ///
+    /// The instance copies every message, gives the copy a title derived from the original, and ends
+    /// the original as `branched`. Use it to continue a session the API may not write to (see
+    /// `RemoteSession.acceptsAPIMessages`). The request is never retried automatically.
+    public func forkSession(sessionID: String) async throws -> RemoteSession {
+        do {
+            // The id goes into the path as is: it must be a single segment.
+            guard !sessionID.isEmpty, !sessionID.contains("/") else {
+                throw HermesAPIError.invalidResponse
+            }
+            var request = makeRequest(
+                method: "POST", path: HermesAPIPaths.sessionFork(sessionID), accept: "application/json"
+            )
+            request.httpBody = Data("{}".utf8)
+            let (data, response) = try await session.data(for: request)
+            try Self.validate(response, requestURL: request.url)
+            return try JSONDecoder().decode(SessionForkBody.self, from: data).session
         } catch is CancellationError {
             throw CancellationError()
         } catch let error as URLError where error.code == .cancelled {
