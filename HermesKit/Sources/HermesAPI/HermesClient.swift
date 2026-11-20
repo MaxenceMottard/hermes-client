@@ -175,6 +175,32 @@ public struct HermesClient: Sendable {
         }
     }
 
+    /// Fetches one page of sessions from `GET {baseURL}/api/sessions`, most recently active first.
+    ///
+    /// `limit` is clamped to the 1...200 range the instance accepts. Unlike `listModels()`, a failure
+    /// is thrown: the conversation list has no fallback. Cancellation throws `CancellationError`.
+    public func listSessions(limit: Int = 50, offset: Int = 0) async throws -> SessionPage {
+        do {
+            let query = [
+                URLQueryItem(name: "limit", value: String(min(max(limit, 1), 200))),
+                URLQueryItem(name: "offset", value: String(max(offset, 0))),
+            ]
+            let request = makeRequest(
+                method: "GET", path: HermesAPIPaths.sessions, accept: "application/json", query: query
+            )
+            let (data, response) = try await session.data(for: request)
+            try Self.validate(response, requestURL: request.url)
+            let body = try JSONDecoder().decode(SessionListBody.self, from: data)
+            return SessionPage(sessions: body.data, hasMore: body.hasMore)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as URLError where error.code == .cancelled {
+            throw CancellationError()
+        } catch {
+            throw HermesAPIError.from(error)
+        }
+    }
+
     /// Builds `POST {baseURL}/v1/chat/completions`. Internal for tests.
     func makeRequest(model: String, messages: [ChatMessage], stream: Bool) throws -> URLRequest {
         var request = makeRequest(
@@ -189,9 +215,16 @@ public struct HermesClient: Sendable {
     }
 
     /// Builds an authenticated request to `{baseURL}{path}`, with the Bearer header and the client timeout.
-    private func makeRequest(method: String, path: String, accept: String) -> URLRequest {
+    private func makeRequest(
+        method: String, path: String, accept: String, query: [URLQueryItem] = []
+    ) -> URLRequest {
         let relativePath = String(path.drop(while: { $0 == "/" }))
-        var request = URLRequest(url: configuration.baseURL.appending(path: relativePath))
+        var url = configuration.baseURL.appending(path: relativePath)
+        if !query.isEmpty, var components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+            components.queryItems = query
+            url = components.url ?? url
+        }
+        var request = URLRequest(url: url)
         request.httpMethod = method
         request.timeoutInterval = configuration.timeout
         if method == "POST" {
