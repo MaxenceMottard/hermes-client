@@ -36,15 +36,17 @@ public final class ChatSession {
 
     public private(set) var messages: [ChatMessage] = []
     public private(set) var phase: Phase = .idle
+    /// The model every request of this session is sent to.
+    public let model: String
 
     private let service: any ChatService
-    private let model: String
     private let store: (any ConversationStore)?
     private let conversationID: UUID?
     private var sendTask: Task<Void, Never>?
 
     /// Without a store, the session lives in memory only. With a store and a conversation id, it loads the
-    /// saved messages and saves to that conversation.
+    /// saved messages and saves to that conversation. A model saved with the conversation takes precedence
+    /// over `model`, which is then only the fallback for conversations saved without one.
     public init(
         service: any ChatService,
         model: String,
@@ -52,10 +54,11 @@ public final class ChatSession {
         conversationID: UUID? = nil
     ) {
         self.service = service
-        self.model = model
         self.store = store
         self.conversationID = conversationID
-        if let store, let conversationID, let saved = try? store.conversation(id: conversationID) {
+        let saved = conversationID.flatMap { id in try? store?.conversation(id: id) }
+        self.model = saved?.model ?? model
+        if let saved {
             messages = saved.messages.map { ChatMessage(role: $0.role, content: $0.content) }
         }
     }

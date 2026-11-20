@@ -39,6 +39,7 @@ public final class ConversationBrowser {
 
     private let store: any ConversationStore
     private let service: any ChatService
+    /// Model given to new conversations, and used by conversations saved without a model.
     private let model: String
 
     /// Loads the conversations and opens the most recent one. Creates a conversation if there is none.
@@ -67,10 +68,14 @@ public final class ConversationBrowser {
         }
     }
 
-    /// Creates a conversation and opens it.
+    /// Creates a conversation bound to `model` and opens it. A `nil` or blank model falls back to the default one.
     @discardableResult
-    public func createConversation() throws -> UUID {
-        let conversation = try store.createConversation(title: ConversationTitle.placeholder)
+    public func createConversation(model chosen: String? = nil) throws -> UUID {
+        let trimmed = chosen?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let conversation = try store.createConversation(
+            title: ConversationTitle.placeholder,
+            model: trimmed.isEmpty ? model : trimmed
+        )
         refresh()
         select(conversation.id)
         return conversation.id

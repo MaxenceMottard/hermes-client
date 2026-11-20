@@ -29,6 +29,24 @@ struct InMemoryConversationStoreTests {
         return (InMemoryConversationStore(now: { clock.now() }), clock)
     }
 
+    @Test("the model given at creation is kept in the conversation and its summary")
+    func createKeepsModel() throws {
+        let (store, _) = makeStore()
+        let created = try store.createConversation(title: "T", model: "some-model")
+
+        #expect(try store.conversation(id: created.id)?.model == "some-model")
+        #expect(try store.summaries().first?.model == "some-model")
+    }
+
+    @Test("a conversation created without a model has none")
+    func createWithoutModel() throws {
+        let (store, _) = makeStore()
+        let created = try store.createConversation(title: "T")
+
+        #expect(created.model == nil)
+        #expect(try store.summaries().first?.model == nil)
+    }
+
     @Test("a created conversation is empty and found by id")
     func createAndFetch() throws {
         let (store, _) = makeStore()
