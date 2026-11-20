@@ -25,7 +25,7 @@ let package = Package(
         ),
         .target(
             name: "HermesChat",
-            dependencies: ["HermesAPI"],
+            dependencies: ["HermesAPI", "HermesStore"],
             swiftSettings: strictConcurrency
         ),
         .target(
@@ -44,7 +44,7 @@ let package = Package(
         ),
         .testTarget(
             name: "HermesChatTests",
-            dependencies: ["HermesChat"]
+            dependencies: ["HermesChat", "HermesStore"]
         ),
         .testTarget(
             name: "HermesStoreTests",
