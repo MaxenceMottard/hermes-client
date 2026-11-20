@@ -3,14 +3,25 @@ import HermesChat
 import HermesStore
 import SwiftUI
 
-/// Sidebar: one list of the conversations on this device and the sessions on the Hermes instance,
-/// most recently used first. Local conversations show their model, open, and can be renamed or deleted.
-/// A remote session opens read-only in the detail pane.
+/// Sidebar: the conversations, most recently used first. Each is a session on the Hermes instance; the
+/// conversations saved on this device by earlier versions of the app are listed too, marked as such.
+/// Every row can be renamed or deleted, from its context menu or a swipe.
 struct ConversationListView: View {
     let browser: ConversationBrowser
+    /// Set to the reason when a rename or a delete fails.
+    @Binding var failure: String?
 
-    @State private var renamingID: UUID?
+    /// The conversation being renamed, and the title being typed.
+    @State private var renaming: Target?
     @State private var draftTitle = ""
+    /// The conversation waiting for the delete confirmation.
+    @State private var deleting: Target?
+
+    /// A row the user acts on: a session on the instance, or a conversation saved on this device.
+    enum Target: Equatable {
+        case remote(String)
+        case local(UUID)
+    }
 
     var body: some View {
         List(selection: selection) {
@@ -22,35 +33,64 @@ struct ConversationListView: View {
                     remoteRow(session)
                 }
             }
-            if let remote = browser.remoteSessions {
-                RemoteStatusRows(list: remote)
-            }
+            RemoteStatusRows(list: browser.remoteSessions)
         }
         .task {
-            await browser.remoteSessions?.reload()
+            await browser.reloadSessions()
         }
         .refreshable {
-            await browser.remoteSessions?.reload()
+            await browser.reloadSessions()
         }
         .alert("Rename conversation", isPresented: isRenaming) {
             TextField("Title", text: $draftTitle)
             Button("Save") {
-                if let id = renamingID {
-                    try? browser.rename(id, to: draftTitle)
+                if let renaming {
+                    rename(renaming, to: draftTitle)
                 }
-                renamingID = nil
+                renaming = nil
             }
             Button("Cancel", role: .cancel) {
-                renamingID = nil
+                renaming = nil
+            }
+        }
+        .confirmationDialog(
+            "Delete this conversation?",
+            isPresented: isDeleting,
+            titleVisibility: .visible,
+            presenting: deleting
+        ) { target in
+            Button("Delete", role: .destructive) {
+                delete(target)
+            }
+        } message: { target in
+            switch target {
+            case .remote:
+                Text("It is deleted from your Hermes instance, with all its messages.")
+            case .local:
+                Text("It is deleted from this device.")
             }
         }
     }
 
     private var entries: [SidebarEntry] {
-        SidebarEntry.merged(
-            local: browser.summaries,
-            remote: browser.remoteSessions?.sessions ?? []
-        )
+        SidebarEntry.merged(local: browser.summaries, remote: browser.remoteSessions.sessions)
+    }
+
+    private func remoteRow(_ session: RemoteSession) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(session.title ?? ConversationTitle.placeholder)
+                .lineLimit(1)
+            if let lastActive = session.lastActive ?? session.startedAt {
+                Text(lastActive, style: .relative)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .tag(SidebarEntry.remoteID(session.id))
+        .modifier(RowActions(
+            onRename: { startRenaming(.remote(session.id), title: session.title ?? "") },
+            onDelete: { deleting = .remote(session.id) }
+        ))
     }
 
     private func localRow(_ summary: ConversationSummary) -> some View {
@@ -58,53 +98,58 @@ struct ConversationListView: View {
             Text(summary.title)
                 .lineLimit(1)
             HStack(spacing: 4) {
-                if let model = summary.model {
-                    Text(ModelChoice.displayName(model: model, provider: summary.provider))
-                        .lineLimit(1)
-                    Text("·")
-                }
+                Label("On this device", systemImage: "iphone")
+                    .labelStyle(.titleAndIcon)
+                Text("·")
                 Text(summary.updatedAt, style: .relative)
             }
             .font(.caption)
             .foregroundStyle(.secondary)
         }
         .tag(SidebarEntry.localID(summary.id))
-        .contextMenu {
-            Button("Rename", systemImage: "pencil") {
-                draftTitle = summary.title
-                renamingID = summary.id
+        .modifier(RowActions(
+            onRename: { startRenaming(.local(summary.id), title: summary.title) },
+            onDelete: { deleting = .local(summary.id) }
+        ))
+    }
+
+    private func startRenaming(_ target: Target, title: String) {
+        draftTitle = title
+        renaming = target
+    }
+
+    private func rename(_ target: Target, to title: String) {
+        switch target {
+        case .local(let id):
+            try? browser.rename(id, to: title)
+        case .remote(let id):
+            Task {
+                do {
+                    try await browser.renameSession(id, to: title)
+                } catch {
+                    failure = "The conversation could not be renamed. \(ConversationsView.reason(error))"
+                }
             }
-            Button("Delete", systemImage: "trash", role: .destructive) {
-                try? browser.delete(summary.id)
-            }
-        }
-        .swipeActions(edge: .trailing) {
-            Button("Delete", systemImage: "trash", role: .destructive) {
-                try? browser.delete(summary.id)
-            }
-            Button("Rename", systemImage: "pencil") {
-                draftTitle = summary.title
-                renamingID = summary.id
-            }
-            .tint(.indigo)
         }
     }
 
-    private func remoteRow(_ session: RemoteSession) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(session.title ?? "Untitled session")
-                .lineLimit(1)
-            if let lastActive = session.lastActive {
-                Text(lastActive, style: .relative)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+    private func delete(_ target: Target) {
+        switch target {
+        case .local(let id):
+            try? browser.delete(id)
+        case .remote(let id):
+            Task {
+                do {
+                    try await browser.deleteSession(id)
+                } catch {
+                    failure = "The conversation could not be deleted. \(ConversationsView.reason(error))"
+                }
             }
         }
-        .tag(SidebarEntry.remoteID(session.id))
     }
 
-    /// One selection for local and remote rows. On compact widths the split view collapses into a
-    /// stack, and only the list selection pushes the detail: a row outside it never opens.
+    /// One selection for every row. On compact widths the split view collapses into a stack, and only
+    /// the list selection pushes the detail: a row outside it never opens.
     private var selection: Binding<String?> {
         Binding(
             get: { browser.selectedEntryID },
@@ -113,10 +158,30 @@ struct ConversationListView: View {
     }
 
     private var isRenaming: Binding<Bool> {
-        Binding(
-            get: { renamingID != nil },
-            set: { if !$0 { renamingID = nil } }
-        )
+        Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })
+    }
+
+    private var isDeleting: Binding<Bool> {
+        Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })
+    }
+}
+
+/// Rename and delete, in the context menu and as trailing swipe actions.
+private struct RowActions: ViewModifier {
+    let onRename: () -> Void
+    let onDelete: () -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .contextMenu {
+                Button("Rename", systemImage: "pencil", action: onRename)
+                Button("Delete", systemImage: "trash", role: .destructive, action: onDelete)
+            }
+            .swipeActions(edge: .trailing) {
+                Button("Delete", systemImage: "trash", role: .destructive, action: onDelete)
+                Button("Rename", systemImage: "pencil", action: onRename)
+                    .tint(.indigo)
+            }
     }
 }
 

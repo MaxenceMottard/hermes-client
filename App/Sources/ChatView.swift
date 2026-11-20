@@ -3,9 +3,12 @@ import HermesChat
 import PhotosUI
 import SwiftUI
 
-/// Conversation screen: the message list, with the floating composer over its bottom.
+/// A conversation: a session stored on the Hermes instance. Shows its messages, with the floating composer
+/// over their bottom; a message, with its photos, streams the reply in from the instance.
+/// A session created outside the app is forked on the first message, see `RemoteTranscript`.
 struct ChatView: View {
-    let session: ChatSession
+    let transcript: RemoteTranscript
+
     @State private var draft = ""
     @State private var isAddingImages = false
     /// The photos picked in the add sheet. `pending` follows it.
@@ -13,87 +16,158 @@ struct ChatView: View {
     /// Ids of the photos taken with the camera, in the order taken. They are not part of the picker selection.
     @State private var cameraIDs: [String] = []
     @State private var pending = PendingAttachments<String>()
+    /// Where the transcript is scrolled. While the reader scrolls it holds the id of the line at the top of
+    /// the viewport; set it to scroll there, or to the end.
+    @State private var position = ScrollPosition(idType: String.self)
+    /// Further tries left for a scroll to the end, checked when the scroll stops: lines not laid out yet
+    /// have estimated heights, so the first scroll can stop short.
+    @State private var endRetries = 0
+    /// Set when the reader stops on the oldest shown line; cleared once the older page is in place.
+    @State private var loadingOlder = false
     @FocusState private var isComposerFocused: Bool
-    @State private var scrollPosition = ScrollPosition(idType: Int.self)
-    /// `false` while the reader is scrolled away from the newest message: shows the scroll-to-bottom button.
+    /// `false` while the reader is scrolled away from the newest line: shows the scroll-to-bottom button.
     @State private var isAtBottom = true
-    /// Top of the composer inset on screen: the visible part of the messages ends there.
+    /// Top of the composer inset on screen: the visible part of the transcript ends there.
     @State private var composerTop = CGFloat.greatestFiniteMagnitude
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 24) {
-                ForEach(Array(session.messages.enumerated()), id: \.offset) { _, message in
-                    MessageRow(message: message)
-                }
-            }
-            .padding()
+        VStack(spacing: 0) {
+            statusView
 
-            ScrollBottomMarker(visibleEnd: composerTop, isAtBottom: $isAtBottom) {
-                withAnimation(.smooth(duration: 0.25)) {
-                    scrollPosition.scrollTo(edge: .bottom)
-                }
-            }
-        }
-        // Before the inset, so a tap on the composer does not hide the keyboard.
-        .dismissesKeyboard($isComposerFocused)
-        .scrollPosition($scrollPosition)
-        // The messages scroll beneath the composer.
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            VStack(spacing: 8) {
-                if session.phase == .sending {
-                    ComposerStatus {
-                        ProgressView()
+            // `defaultScrollAnchor(.bottom)` and `ScrollViewProxy.scrollTo` are not used: with a lazy stack on
+            // iOS 27 the first leaves the viewport blank until the user scrolls, and the second does nothing
+            // after a prepend. The scroll position is driven through `scrollPosition(_:anchor:)` instead.
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 24) {
+                    ForEach(transcript.lines) { line in
+                        MessageRow(message: line.message)
                     }
                 }
+                .scrollTargetLayout()
+                .padding()
 
-                if let message = failureMessage {
-                    ComposerStatus {
-                        Text(message)
-                            .foregroundStyle(.red)
-                        if session.canRetry {
-                            Button("Retry") {
-                                Task { await session.retry() }
-                            }
+                ScrollBottomMarker(visibleEnd: composerTop, isAtBottom: $isAtBottom) {
+                    scrollToEnd(animation: .smooth(duration: 0.25))
+                }
+            }
+            // Before the inset, so a tap on the composer does not hide the keyboard.
+            .dismissesKeyboard($isComposerFocused)
+            .scrollPosition($position, anchor: .top)
+            .onScrollPhaseChange { _, phase in
+                switch phase {
+                case .interacting:
+                    // The reader took over: a scroll to the end under way is not finished.
+                    endRetries = 0
+                case .idle:
+                    // A scroll to the end that stopped short goes on from there.
+                    if endRetries > 0 {
+                        if isAtBottom {
+                            endRetries = 0
+                        } else {
+                            endRetries -= 1
+                            scrollToEnd(animation: .smooth(duration: 0.2))
                         }
                     }
+                    // Stopping on the oldest shown line pulls in the next older page.
+                    if !loadingOlder, transcript.hasMore, transcript.state == .loaded,
+                       let topID = position.viewID(type: String.self), topID == transcript.lines.first?.id
+                    {
+                        loadingOlder = true
+                    }
+                default:
+                    break
                 }
-
-                ChatComposer(
-                    draft: $draft,
-                    isFocused: $isComposerFocused,
-                    pendingImages: pending.attachments,
-                    onRemoveImage: removeImage,
-                    onAdd: { isAddingImages = true },
-                    model: session.modelChoice,
-                    isBusy: session.isBusy,
-                    canSend: canSend,
-                    onSend: send,
-                    onStop: { session.stop() }
-                )
             }
-            .reportsTop($composerTop)
-            .scrollToBottomButton(isVisible: !isAtBottom) {
-                withAnimation {
-                    scrollPosition.scrollTo(edge: .bottom)
+            .task(id: loadingOlder) {
+                guard loadingOlder else { return }
+                let firstShown = position.viewID(type: String.self)
+                await transcript.loadMore()
+                // Older lines went above: put the line the reader was on back at the top.
+                if let firstShown {
+                    position.scrollTo(id: firstShown, anchor: .top)
                 }
+                loadingOlder = false
+            }
+            // A message sent from here scrolls the transcript to its end.
+            .onChange(of: transcript.lines.last?.id) { oldID, lastID in
+                if oldID != nil, lastID != nil {
+                    endRetries = 2
+                    scrollToEnd(animation: .default)
+                }
+            }
+            // The lines scroll beneath the composer.
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                composerArea
             }
         }
+        .navigationTitle(transcript.title ?? ConversationTitle.placeholder)
+        .inlineNavigationTitle()
         .sheet(isPresented: $isAddingImages) {
             AddToMessageSheet(
                 selection: $pickerItems,
-                maxSelectionCount: max(1, ChatSession.maxImagesPerMessage - cameraIDs.count),
-                canAddPhoto: pending.entries.count < ChatSession.maxImagesPerMessage,
+                maxSelectionCount: max(1, RemoteTranscript.maxImagesPerMessage - cameraIDs.count),
+                canAddPhoto: pending.entries.count < RemoteTranscript.maxImagesPerMessage,
                 onPhotoTaken: addCameraPhoto
             )
         }
         .onChange(of: pickerItems) { _, items in
             loadPicked(items)
         }
+        // The browser starts the load when the session opens; this waits for it, or loads again if it was
+        // never started. On iOS 27 a collapsed split view can skip or cancel this task, so the jump to the
+        // newest line also runs when the first load lands.
+        .task(id: transcript.sessionID) {
+            if transcript.state != .loaded {
+                await transcript.load()
+            }
+            await scrollToNewest()
+        }
+        .onChange(of: transcript.state) { oldState, newState in
+            if oldState == .loading, newState == .loaded, position.viewID == nil, position.edge == nil {
+                Task { await scrollToNewest() }
+            }
+        }
     }
 }
 
 private extension ChatView {
+    var composerArea: some View {
+        VStack(spacing: 8) {
+            // A session created elsewhere (web dashboard, TUI) is forked on the first message.
+            if !transcript.acceptsMessages {
+                ComposerStatus {
+                    Text("Started outside the app. Your next message continues it as a new conversation.")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if let error = transcript.sendError {
+                ComposerStatus {
+                    Text(error)
+                        .foregroundStyle(.red)
+                }
+            }
+
+            ChatComposer(
+                draft: $draft,
+                isFocused: $isComposerFocused,
+                pendingImages: pending.attachments,
+                onRemoveImage: removeImage,
+                onAdd: { isAddingImages = true },
+                model: transcript.model,
+                isBusy: transcript.isSending,
+                canSend: canSend,
+                onSend: send,
+                onStop: { transcript.stop() }
+            )
+        }
+        .reportsTop($composerTop)
+        .scrollToBottomButton(isVisible: !isAtBottom) {
+            endRetries = 2
+            scrollToEnd(animation: .smooth(duration: 0.35))
+        }
+    }
+
     var canSend: Bool {
         !pending.isEmpty || !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
@@ -105,7 +179,7 @@ private extension ChatView {
         pending.clear()
         pickerItems = []
         cameraIDs = []
-        Task { await session.send(text, images: images) }
+        Task { await transcript.send(text, images: images) }
     }
 
     /// Everything the composer should hold: the picked photos, then the camera photos.
@@ -117,7 +191,7 @@ private extension ChatView {
     /// Loads the newly picked photos into the composer and drops the deselected ones.
     func loadPicked(_ items: [PhotosPickerItem]) {
         // Camera photos count against the limit too: trim the picks that do not fit.
-        let room = ChatSession.maxImagesPerMessage - cameraIDs.count
+        let room = RemoteTranscript.maxImagesPerMessage - cameraIDs.count
         if items.count > room {
             pickerItems = Array(items.prefix(max(0, room)))
             return
@@ -134,7 +208,7 @@ private extension ChatView {
 
     /// Adds a photo taken with the camera, downscaled like a picked one.
     func addCameraPhoto(_ data: Data) {
-        guard pending.entries.count < ChatSession.maxImagesPerMessage,
+        guard pending.entries.count < RemoteTranscript.maxImagesPerMessage,
               let attachment = ImageAttachmentLoader.jpegAttachment(from: data)
         else { return }
         let id = "camera-\(UUID().uuidString)"
@@ -150,21 +224,64 @@ private extension ChatView {
         pickerItems.removeAll { $0.itemIdentifier.map { !remaining.contains($0) } ?? true }
     }
 
-    var failureMessage: String? {
-        switch session.phase {
+    /// Scrolls to the end of the transcript in one move, so it can be animated: the bottom of the newest
+    /// line comes just above the composer, however tall the line is.
+    ///
+    /// Setting the position to the value it already holds does nothing. After a scroll to the bottom edge
+    /// that the reader has not moved from, the bottom of the last line is asked for instead.
+    func scrollToEnd(animation: Animation?) {
+        guard let lastID = transcript.lines.last?.id else { return }
+        var target = position
+        if target.edge == .bottom {
+            target.scrollTo(id: lastID, anchor: .bottom)
+        } else {
+            target.scrollTo(edge: .bottom)
+        }
+        withAnimation(animation) {
+            position = target
+        }
+    }
+
+    /// Opens the transcript on its newest line. The lazy stack estimates the height of rows it has not
+    /// laid out yet, so the first jump can stop short: the end is asked for twice more, each time with a
+    /// different value so the position changes.
+    func scrollToNewest() async {
+        guard let lastID = transcript.lines.last?.id else { return }
+        position.scrollTo(id: lastID, anchor: .top)
+        try? await Task.sleep(for: .milliseconds(10))
+        position.scrollTo(edge: .bottom)
+        try? await Task.sleep(for: .milliseconds(10))
+        position.scrollTo(id: lastID, anchor: .bottom)
+    }
+
+    /// Loading and failure state, above the transcript.
+    @ViewBuilder
+    var statusView: some View {
+        switch transcript.state {
+        case .idle, .loaded:
+            EmptyView()
+        case .loading:
+            ProgressView()
+                .padding(.vertical, 8)
         case .failed(let error):
-            error.errorDescription ?? "Unknown error"
-        case .emptyReply:
-            "The agent sent an empty reply."
-        case .idle, .sending, .streaming:
-            nil
+            VStack(alignment: .leading, spacing: 4) {
+                Text(error.localizedDescription)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Button("Retry") {
+                    Task {
+                        await transcript.load()
+                        await scrollToNewest()
+                    }
+                }
+            }
+            .padding()
         }
     }
 }
 
-/// One message of a conversation, shared by the local and remote chats. A reply is laid out straight on
-/// the page, full width, without a background; a message from the user sits in a rounded bubble on the
-/// right, with its photos above it.
+/// One message of a conversation. A reply is laid out straight on the page, full width, without a
+/// background; a message from the user sits in a rounded bubble on the right, with its photos above it.
 struct MessageRow: View {
     let message: ChatMessage
 
