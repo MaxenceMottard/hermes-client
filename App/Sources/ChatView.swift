@@ -49,6 +49,7 @@ struct ChatView: View {
                     }
                     .labelStyle(.iconOnly)
                     .font(.title2)
+                    .accessibilityLabel("Stop reply")
                 } else {
                     Button("Send", systemImage: "arrow.up.circle.fill") {
                         let text = draft
@@ -58,6 +59,7 @@ struct ChatView: View {
                     .labelStyle(.iconOnly)
                     .font(.title2)
                     .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .accessibilityLabel("Send message")
                 }
             }
             .padding()
@@ -96,6 +98,8 @@ private struct MessageRow: View {
                     message.role == "user" ? Color.accentColor.opacity(0.2) : Color.secondary.opacity(0.12),
                     in: RoundedRectangle(cornerRadius: 12)
                 )
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(MessageAccessibility.label(for: message))
             if message.role != "user" { Spacer(minLength: 40) }
         }
     }
