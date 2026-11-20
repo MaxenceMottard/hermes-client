@@ -1,0 +1,60 @@
+name: Preview macOS
+
+# Builds the app for macOS and shares it as a Tuist Preview when the `preview-macos` label is added to an
+# open pull request. The build is ad hoc signed: no certificate is needed, but macOS asks again for
+# Keychain access after each new build. The label is removed as soon as the run starts: add it again to rebuild.
+on:
+  pull_request:
+    types: [labeled]
+
+concurrency:
+  group: preview-macos-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  id-token: write # Tuist OIDC authentication
+  pull-requests: write # Remove the preview label
+
+env:
+  # Tuist server project, read by Tuist.swift. Update if the Tuist project uses a different handle.
+  TUIST_SERVER_FULL_HANDLE: mtm-capital/hermes-client
+
+jobs:
+  preview:
+    name: macOS preview
+    if: github.event.label.name == 'preview-macos' && github.event.pull_request.state == 'open'
+    runs-on: xcode-27
+    timeout-minutes: 45
+    env:
+      BUILD_NUMBER: ${{ github.run_number }}.${{ github.run_attempt }}
+    steps:
+      - name: Remove the preview-macos label
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr edit "${{ github.event.pull_request.number }}" \
+            --repo "${{ github.repository }}" \
+            --remove-label preview-macos
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+        with:
+          install: true
+          cache: true
+      - name: Authenticate with Tuist
+        run: tuist auth login
+      - name: Generate Tuist project
+        run: |
+          tuist install
+          tuist generate --no-open
+      - name: Build for macOS
+        run: |
+          tuist xcodebuild build \
+            -workspace Hermes.xcworkspace \
+            -scheme Hermes \
+            -configuration Debug \
+            -destination 'generic/platform=macOS' \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+            CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=
+      - name: Share macOS preview
+        run: tuist share Hermes --configuration Debug --platforms macos

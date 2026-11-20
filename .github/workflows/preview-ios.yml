@@ -1,0 +1,61 @@
+name: Preview iOS
+
+# Builds the app for the iOS Simulator and shares it as a Tuist Preview when the `preview-ios` label
+# is added to an open pull request. The label is removed as soon as the run starts: add it again to rebuild.
+on:
+  pull_request:
+    types: [labeled]
+
+concurrency:
+  group: preview-ios-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  id-token: write # Tuist OIDC authentication
+  pull-requests: write # Remove the preview label
+
+env:
+  # Tuist server project, read by Tuist.swift. Update if the Tuist project uses a different handle.
+  TUIST_SERVER_FULL_HANDLE: mtm-capital/hermes-client
+
+jobs:
+  preview:
+    name: iOS Simulator preview
+    if: github.event.label.name == 'preview-ios' && github.event.pull_request.state == 'open'
+    runs-on: xcode-27
+    timeout-minutes: 45
+    env:
+      # Unique build number (CFBundleVersion) per run and attempt. Tuist rejects a build whose binary ID
+      # and build version were already uploaded.
+      BUILD_NUMBER: ${{ github.run_number }}.${{ github.run_attempt }}
+    steps:
+      # First step, so that adding the label again triggers a new preview.
+      - name: Remove the preview-ios label
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr edit "${{ github.event.pull_request.number }}" \
+            --repo "${{ github.repository }}" \
+            --remove-label preview-ios
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+        with:
+          install: true
+          cache: true
+      - name: Authenticate with Tuist
+        run: tuist auth login
+      - name: Generate Tuist project
+        run: |
+          tuist install
+          tuist generate --no-open
+      - name: Build for the iOS Simulator
+        run: |
+          tuist xcodebuild build \
+            -workspace Hermes.xcworkspace \
+            -scheme Hermes \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
+      - name: Share simulator preview
+        run: tuist share Hermes --configuration Debug --platforms ios
