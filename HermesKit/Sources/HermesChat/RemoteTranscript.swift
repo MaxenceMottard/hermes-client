@@ -5,24 +5,37 @@ import HermesAPI
     import Observation
 #endif
 
-/// One message of a transcript: a user or assistant message with text, ready to show.
+/// One message of a transcript: a user or assistant message, ready to show.
 public struct TranscriptLine: Identifiable, Equatable, Sendable {
     public let id: String
     public let role: String
     public let text: String
     public let date: Date?
+    /// The images of the message that this device has a copy of, see `SentImageStore`.
+    public let images: [ImageAttachment]
+    /// Images the message names but this device has no copy of: they were sent from elsewhere.
+    public let missingImageCount: Int
 
-    public init(id: String, role: String, text: String, date: Date?) {
+    public init(
+        id: String,
+        role: String,
+        text: String,
+        date: Date?,
+        images: [ImageAttachment] = [],
+        missingImageCount: Int = 0
+    ) {
         self.id = id
         self.role = role
         self.text = text
         self.date = date
+        self.images = images
+        self.missingImageCount = missingImageCount
     }
 }
 
 /// The messages of a session stored on the Hermes instance, and a way to continue it.
 ///
-/// Only user and assistant messages with text are kept. Tool, system and compaction rows, and rows the
+/// Only user and assistant messages with text or images are kept. Tool, system and compaction rows, and rows the
 /// instance marks as hidden, are dropped. The first page holds the newest messages; each further page holds
 /// older ones and is put above the lines already shown. Pages are requested with an offset counted in
 /// received messages, not in displayed lines.
@@ -70,6 +83,8 @@ public final class RemoteTranscript: Identifiable {
     public private(set) var sendError: String?
 
     private let source: any SessionListing
+    /// Copies of the images sent from this device, matched with the images the messages name.
+    private let imageStore: (any SentImageStore)?
     /// Messages received so far, displayed or not: the offset of the next page.
     private var received = 0
     private var sendTask: Task<Void, Never>?
@@ -81,8 +96,10 @@ public final class RemoteTranscript: Identifiable {
         title: String?,
         model: String? = nil,
         source: any SessionListing,
-        acceptsMessages: Bool = true
+        acceptsMessages: Bool = true,
+        imageStore: (any SentImageStore)? = nil
     ) {
+        self.imageStore = imageStore
         self.sessionID = sessionID
         self.title = title
         self.model = model
@@ -93,15 +110,30 @@ public final class RemoteTranscript: Identifiable {
 
     public nonisolated var id: String { sessionID }
 
-    /// Keeps the lines a reader should see, in the order the instance returned them.
-    public static func lines(from messages: [SessionMessage]) -> [TranscriptLine] {
+    /// Keeps the lines a reader should see, in the order the instance returned them. The image markers the
+    /// instance writes into a message are taken out of its text; the images they name are looked up in
+    /// `imageStore`.
+    public static func lines(
+        from messages: [SessionMessage],
+        imageStore: (any SentImageStore)? = nil
+    ) -> [TranscriptLine] {
         messages.compactMap { message in
             guard message.displayKind != "hidden",
-                  message.role == "user" || message.role == "assistant",
-                  let text = message.content?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  !text.isEmpty
+                  message.role == "user" || message.role == "assistant"
             else { return nil }
-            return TranscriptLine(id: message.id, role: message.role, text: text, date: message.timestamp)
+            let (text, references) = StoredImageMarkers.parse(message.content ?? "")
+            let images = references.compactMap { reference in
+                reference.sha256.flatMap { imageStore?.image(sha256: $0) }
+            }
+            guard !text.isEmpty || !references.isEmpty else { return nil }
+            return TranscriptLine(
+                id: message.id,
+                role: message.role,
+                text: text,
+                date: message.timestamp,
+                images: images,
+                missingImageCount: references.count - images.count
+            )
         }
     }
 
@@ -115,7 +147,7 @@ public final class RemoteTranscript: Identifiable {
             let page = try await transcript.source.listSessionMessages(
                 sessionID: transcript.activeSessionID, limit: Self.pageSize, offset: 0
             )
-            transcript.lines = Self.lines(from: page.messages)
+            transcript.lines = Self.lines(from: page.messages, imageStore: transcript.imageStore)
             transcript.received = page.messages.count
             transcript.hasMore = page.hasMore
         }
@@ -130,7 +162,7 @@ public final class RemoteTranscript: Identifiable {
             let page = try await transcript.source.listSessionMessages(
                 sessionID: transcript.activeSessionID, limit: Self.pageSize, offset: transcript.received
             )
-            transcript.lines = Self.lines(from: page.messages) + transcript.lines
+            transcript.lines = Self.lines(from: page.messages, imageStore: transcript.imageStore) + transcript.lines
             transcript.received += page.messages.count
             transcript.hasMore = page.hasMore
         }
@@ -233,6 +265,9 @@ public final class RemoteTranscript: Identifiable {
     private func setReply(id: String, _ update: (String) -> String) {
         guard let index = lines.firstIndex(where: { $0.id == id }) else { return }
         let line = lines[index]
-        lines[index] = TranscriptLine(id: line.id, role: line.role, text: update(line.text), date: line.date)
+        lines[index] = TranscriptLine(
+            id: line.id, role: line.role, text: update(line.text), date: line.date,
+            images: line.images, missingImageCount: line.missingImageCount
+        )
     }
 }

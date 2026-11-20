@@ -33,7 +33,10 @@ struct RemoteChatView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 24) {
                     ForEach(transcript.lines) { line in
-                        MessageRow(message: ChatMessage(role: line.role, content: line.text))
+                        MessageRow(
+                            message: ChatMessage(role: line.role, content: line.text, images: line.images),
+                            missingImageCount: line.missingImageCount
+                        )
                     }
                 }
                 .scrollTargetLayout()

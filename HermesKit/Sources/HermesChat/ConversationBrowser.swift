@@ -43,6 +43,7 @@ public final class ConversationBrowser {
     /// without a model. `hermes-agent` (the default) lets the instance pick.
     private let model: String
     private let lastModel: (any LastModelStorage)?
+    private let imageStore: (any SentImageStore)?
     /// Local conversations left while a reply was streaming, by conversation id. The reply keeps running in
     /// its session, so opening the conversation again shows that session instead of a copy read from the
     /// store, which would miss everything received after it was read.
@@ -52,14 +53,17 @@ public final class ConversationBrowser {
     private var liveTranscripts: [RemoteTranscript] = []
 
     /// Loads the conversations and opens the most recent one. Creates a conversation if there is none.
-    /// With a `lastModel` storage, new conversations start on the model chosen last time.
+    /// With a `lastModel` storage, new conversations start on the model chosen last time. Images sent are
+    /// copied to `imageStore`.
     public init(
         store: any ConversationStore,
         service: any ChatService,
         model: String = ModelChoice.instanceDefault.model,
         remoteSessions: RemoteSessionList? = nil,
-        lastModel: (any LastModelStorage)? = nil
+        lastModel: (any LastModelStorage)? = nil,
+        imageStore: (any SentImageStore)? = nil
     ) {
+        self.imageStore = imageStore
         self.store = store
         self.service = service
         self.model = model
@@ -126,7 +130,9 @@ public final class ConversationBrowser {
         }
         selectedID = id
         session = liveSessions.removeValue(forKey: id)
-            ?? ChatSession(service: service, model: model, store: store, conversationID: id)
+            ?? ChatSession(
+                service: service, model: model, store: store, conversationID: id, imageStore: imageStore
+            )
     }
 
     /// Keeps the open local session if a reply is streaming in it, and drops kept sessions whose reply

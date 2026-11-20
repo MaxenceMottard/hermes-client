@@ -23,6 +23,18 @@ struct ChatSessionImageTests {
         #expect(service.recordedRequests().first == [ChatMessage(role: "user", content: "Describe", images: [photo])])
     }
 
+    @Test("images sent are copied to the image store, under the digest of their bytes")
+    func imagesAreKept() async throws {
+        let service = FakeChatService(scripts: [.deltas(["A"])])
+        let store = InMemorySentImageStore()
+        let session = ChatSession(service: service, model: "m", imageStore: store)
+        let photo = try image(7)
+
+        await session.send("Look", images: [photo])
+
+        #expect(store.image(sha256: sha256Hex(photo.data)) == photo)
+    }
+
     @Test("an image alone is a valid message")
     func imageWithoutText() async throws {
         let service = FakeChatService(scripts: [.deltas(["A"])])
