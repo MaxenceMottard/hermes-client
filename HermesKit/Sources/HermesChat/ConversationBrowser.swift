@@ -41,18 +41,22 @@ public final class ConversationBrowser {
     private let service: any ChatService
     /// Model given to new conversations, and used by conversations saved without a model.
     private let model: String
+    private let lastModel: (any LastModelStorage)?
 
     /// Loads the conversations and opens the most recent one. Creates a conversation if there is none.
+    /// With a `lastModel` storage, new conversations start on the model chosen last time.
     public init(
         store: any ConversationStore,
         service: any ChatService,
         model: String,
-        remoteSessions: RemoteSessionList? = nil
+        remoteSessions: RemoteSessionList? = nil,
+        lastModel: (any LastModelStorage)? = nil
     ) {
         self.store = store
         self.service = service
         self.model = model
         self.remoteSessions = remoteSessions
+        self.lastModel = lastModel
         refresh()
         if summaries.isEmpty {
             _ = try? createConversation()
@@ -68,14 +72,23 @@ public final class ConversationBrowser {
         }
     }
 
-    /// Creates a conversation bound to `model` and opens it. A `nil` or blank model falls back to the default one.
+    /// The model a new conversation starts on: the last one chosen, else the default model.
+    public var preferredModel: String {
+        lastModel?.load() ?? model
+    }
+
+    /// Creates a conversation bound to `model` and opens it. A chosen model is remembered as the last used one.
+    /// A `nil` or blank model falls back to `preferredModel` and is not remembered.
     @discardableResult
     public func createConversation(model chosen: String? = nil) throws -> UUID {
         let trimmed = chosen?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let conversation = try store.createConversation(
             title: ConversationTitle.placeholder,
-            model: trimmed.isEmpty ? model : trimmed
+            model: trimmed.isEmpty ? preferredModel : trimmed
         )
+        if !trimmed.isEmpty {
+            lastModel?.save(trimmed)
+        }
         refresh()
         select(conversation.id)
         return conversation.id
