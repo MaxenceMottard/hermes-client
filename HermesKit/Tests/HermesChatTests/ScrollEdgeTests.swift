@@ -4,38 +4,26 @@ import Testing
 
 @Suite("Scroll edge")
 struct ScrollEdgeTests {
-    // A 1 000 pt conversation in a 600 pt scroll view with a 150 pt composer inset: the bottom is
-    // reached at offset 1 000 + 150 - 600 = 550.
+    // The composer's top edge sits at y = 600 on screen.
 
-    @Test("scrolled to the end is at the bottom")
+    @Test("content ending at the composer is at the bottom")
     func atEnd() {
-        #expect(ScrollEdge.isNearBottom(offsetY: 550, visibleHeight: 600, contentHeight: 1_000, bottomInset: 150))
+        #expect(ScrollEdge.isNearBottom(contentEnd: 600, visibleEnd: 600))
     }
 
-    @Test("a few points short of the end still counts as the bottom")
+    @Test("content ending a few points under the composer still counts as the bottom")
     func withinTolerance() {
-        #expect(ScrollEdge.isNearBottom(offsetY: 520, visibleHeight: 600, contentHeight: 1_000, bottomInset: 150))
+        #expect(ScrollEdge.isNearBottom(contentEnd: 630, visibleEnd: 600))
     }
 
-    @Test("scrolled up past the tolerance is not at the bottom")
+    @Test("content going on under the composer is not at the bottom")
     func scrolledUp() {
-        #expect(!ScrollEdge.isNearBottom(offsetY: 500, visibleHeight: 600, contentHeight: 1_000, bottomInset: 150))
-        #expect(!ScrollEdge.isNearBottom(offsetY: 0, visibleHeight: 600, contentHeight: 1_000, bottomInset: 150))
+        #expect(!ScrollEdge.isNearBottom(contentEnd: 700, visibleEnd: 600))
+        #expect(!ScrollEdge.isNearBottom(contentEnd: 5_000, visibleEnd: 600))
     }
 
-    @Test("the bottom inset counts: the end hidden under the composer is not the bottom")
-    func insetCounts() {
-        // Without the inset this offset would be the end; with it, 150 pt are still hidden.
-        #expect(!ScrollEdge.isNearBottom(offsetY: 400, visibleHeight: 600, contentHeight: 1_000, bottomInset: 150))
-    }
-
-    @Test("content shorter than the view is always at the bottom")
+    @Test("content shorter than the screen, ending above the composer, is at the bottom")
     func shortContent() {
-        #expect(ScrollEdge.isNearBottom(offsetY: -100, visibleHeight: 600, contentHeight: 200, bottomInset: 150))
-    }
-
-    @Test("an over-scroll past the end is at the bottom")
-    func bounce() {
-        #expect(ScrollEdge.isNearBottom(offsetY: 600, visibleHeight: 600, contentHeight: 1_000, bottomInset: 150))
+        #expect(ScrollEdge.isNearBottom(contentEnd: 200, visibleEnd: 600))
     }
 }
