@@ -164,9 +164,11 @@ private extension ChatView {
 
 /// One message of a conversation, shared by the local and remote chats. A reply is laid out straight on
 /// the page, full width, without a background; a message from the user sits in a rounded bubble on the
-/// right, with its photos above it.
+/// right, with its images above it.
 struct MessageRow: View {
     let message: ChatMessage
+    /// Images the message names that this device has no copy of, shown as placeholders.
+    var missingImageCount = 0
 
     private var isUser: Bool { message.role == "user" }
 
@@ -195,16 +197,12 @@ struct MessageRow: View {
 
     @ViewBuilder
     private var images: some View {
-        if !message.images.isEmpty {
-            ScrollView(.horizontal) {
-                HStack(spacing: 6) {
-                    ForEach(Array(message.images.enumerated()), id: \.offset) { _, image in
-                        AttachmentThumbnail(data: image.data)
-                    }
-                }
-            }
-            // Also aligns photos that fit: on the right for a message from the user.
-            .defaultScrollAnchor(isUser ? .trailing : .leading)
+        if !message.images.isEmpty || missingImageCount > 0 {
+            MessageImages(
+                images: message.images,
+                missingCount: missingImageCount,
+                alignment: isUser ? .trailing : .leading
+            )
         }
     }
 }

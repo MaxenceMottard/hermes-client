@@ -49,19 +49,23 @@ public final class ChatSession {
     private let service: any ChatService
     private let store: (any ConversationStore)?
     private let conversationID: UUID?
+    private let imageStore: (any SentImageStore)?
     private var sendTask: Task<Void, Never>?
 
     /// Without a store, the session lives in memory only. With a store and a conversation id, it loads the
     /// saved messages and saves to that conversation. A model saved with the conversation takes precedence
     /// over `model` and `provider`, which are then only the fallback for conversations saved without one.
+    /// Images sent are copied to `imageStore`, so that the instance's copy of the conversation can show them.
     public init(
         service: any ChatService,
         model: String,
         provider: String? = nil,
         store: (any ConversationStore)? = nil,
-        conversationID: UUID? = nil
+        conversationID: UUID? = nil,
+        imageStore: (any SentImageStore)? = nil
     ) {
         self.service = service
+        self.imageStore = imageStore
         self.store = store
         self.conversationID = conversationID
         let saved = conversationID.flatMap { id in try? store?.conversation(id: id) }
@@ -103,6 +107,7 @@ public final class ChatSession {
         guard !(content.isEmpty && images.isEmpty), !isBusy else { return }
         guard images.count <= Self.maxImagesPerMessage else { return }
         messages.append(ChatMessage(role: "user", content: content, images: images))
+        images.forEach { imageStore?.save($0) }
         titleIfUntitled(from: content.isEmpty ? "Image" : content)
         persist()
         await runReply()
