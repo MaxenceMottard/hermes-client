@@ -9,8 +9,12 @@ struct RemoteChatView: View {
     let transcript: RemoteTranscript
 
     @State private var draft = ""
-    /// Id of the line at the top of the viewport. Set it to scroll there.
-    @State private var scrolledID: String?
+    /// Where the transcript is scrolled. While the reader scrolls it holds the id of the line at the top of
+    /// the viewport; set it to scroll there, or to the end.
+    @State private var position = ScrollPosition(idType: String.self)
+    /// Further tries left for a scroll to the end, checked when the scroll stops: lines not laid out yet
+    /// have estimated heights, so the first scroll can stop short.
+    @State private var endRetries = 0
     /// Set when the reader stops on the oldest shown line; cleared once the older page is in place.
     @State private var loadingOlder = false
     @FocusState private var isComposerFocused: Bool
@@ -25,7 +29,7 @@ struct RemoteChatView: View {
 
             // `defaultScrollAnchor(.bottom)` and `ScrollViewProxy.scrollTo` are not used: with a lazy stack on
             // iOS 27 the first leaves the viewport blank until the user scrolls, and the second does nothing
-            // after a prepend. The scroll position is driven through `scrollPosition(id:)` instead.
+            // after a prepend. The scroll position is driven through `scrollPosition(_:anchor:)` instead.
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
                     ForEach(transcript.lines) { line in
@@ -36,36 +40,52 @@ struct RemoteChatView: View {
                 .padding()
 
                 ScrollBottomMarker(visibleEnd: composerTop, isAtBottom: $isAtBottom) {
-                    Task { await scrollToLastLine(animation: .smooth(duration: 0.25)) }
+                    scrollToEnd(animation: .smooth(duration: 0.25))
                 }
             }
             // Before the inset, so a tap on the composer does not hide the keyboard.
             .dismissesKeyboard($isComposerFocused)
-            .scrollPosition(id: $scrolledID, anchor: .top)
-            // Stopping on the oldest shown line pulls in the next older page.
+            .scrollPosition($position, anchor: .top)
             .onScrollPhaseChange { _, phase in
-                if phase == .idle, !loadingOlder, transcript.hasMore, transcript.state == .loaded,
-                   let scrolledID, scrolledID == transcript.lines.first?.id
-                {
-                    loadingOlder = true
+                switch phase {
+                case .interacting:
+                    // The reader took over: a scroll to the end under way is not finished.
+                    endRetries = 0
+                case .idle:
+                    // A scroll to the end that stopped short goes on from there.
+                    if endRetries > 0 {
+                        if isAtBottom {
+                            endRetries = 0
+                        } else {
+                            endRetries -= 1
+                            scrollToEnd(animation: .smooth(duration: 0.2))
+                        }
+                    }
+                    // Stopping on the oldest shown line pulls in the next older page.
+                    if !loadingOlder, transcript.hasMore, transcript.state == .loaded,
+                       let topID = position.viewID(type: String.self), topID == transcript.lines.first?.id
+                    {
+                        loadingOlder = true
+                    }
+                default:
+                    break
                 }
             }
             .task(id: loadingOlder) {
                 guard loadingOlder else { return }
-                let firstShown = scrolledID
+                let firstShown = position.viewID(type: String.self)
                 await transcript.loadMore()
                 // Older lines went above: put the line the reader was on back at the top.
                 if let firstShown {
-                    scrolledID = firstShown
+                    position.scrollTo(id: firstShown, anchor: .top)
                 }
                 loadingOlder = false
             }
             // A message sent from here scrolls the transcript to its end.
             .onChange(of: transcript.lines.last?.id) { oldID, lastID in
-                if oldID != nil, let lastID {
-                    withAnimation {
-                        scrolledID = lastID
-                    }
+                if oldID != nil, lastID != nil {
+                    endRetries = 2
+                    scrollToEnd(animation: .default)
                 }
             }
 
@@ -103,13 +123,8 @@ struct RemoteChatView: View {
                 }
                 .reportsTop($composerTop)
                 .scrollToBottomButton(isVisible: !isAtBottom) {
-                    Task {
-                        await scrollToLastLine()
-                        // Lines far up have estimated heights: an animated jump from there can stop short.
-                        if !isAtBottom {
-                            await scrollToNewest()
-                        }
-                    }
+                    endRetries = 2
+                    scrollToEnd(animation: .smooth(duration: 0.35))
                 }
             }
         }
@@ -125,41 +140,40 @@ struct RemoteChatView: View {
             await scrollToNewest()
         }
         .onChange(of: transcript.state) { oldState, newState in
-            if oldState == .loading, newState == .loaded, scrolledID == nil {
+            if oldState == .loading, newState == .loaded, position.viewID == nil, position.edge == nil {
                 Task { await scrollToNewest() }
             }
         }
     }
 
-    /// Scrolls to the newest line in one move, so it can be animated. Setting the position to the last
-    /// line with the `.top` anchor stops at the end of the content.
+    /// Scrolls to the end of the transcript in one move, so it can be animated: the bottom of the newest
+    /// line comes just above the composer, however tall the line is.
     ///
-    /// The binding is only written back when the reader scrolls: after a programmatic jump it can still
-    /// hold the last line, and setting the same id again does nothing. It is cleared first in that case.
-    private func scrollToLastLine(animation: Animation = .default) async {
+    /// Setting the position to the value it already holds does nothing. After a scroll to the bottom edge
+    /// that the reader has not moved from, the bottom of the last line is asked for instead.
+    private func scrollToEnd(animation: Animation?) {
         guard let lastID = transcript.lines.last?.id else { return }
-        if scrolledID == lastID {
-            scrolledID = nil
-            try? await Task.sleep(for: .milliseconds(10))
+        var target = position
+        if target.edge == .bottom {
+            target.scrollTo(id: lastID, anchor: .bottom)
+        } else {
+            target.scrollTo(edge: .bottom)
         }
-        await withCheckedContinuation { continuation in
-            withAnimation(animation) {
-                scrolledID = lastID
-            } completion: {
-                continuation.resume()
-            }
+        withAnimation(animation) {
+            position = target
         }
     }
 
     /// Opens the transcript on its newest line. The lazy stack estimates the height of rows it has not
-    /// laid out yet, so the first jump can stop short: the position is reset and set a second time.
+    /// laid out yet, so the first jump can stop short: the end is asked for twice more, each time with a
+    /// different value so the position changes.
     private func scrollToNewest() async {
         guard let lastID = transcript.lines.last?.id else { return }
-        scrolledID = lastID
+        position.scrollTo(id: lastID, anchor: .top)
         try? await Task.sleep(for: .milliseconds(10))
-        scrolledID = nil
+        position.scrollTo(edge: .bottom)
         try? await Task.sleep(for: .milliseconds(10))
-        scrolledID = lastID
+        position.scrollTo(id: lastID, anchor: .bottom)
     }
 
     /// Loading and failure state, above the transcript.
