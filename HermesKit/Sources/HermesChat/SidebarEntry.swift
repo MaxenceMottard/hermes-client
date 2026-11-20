@@ -62,6 +62,16 @@ public enum SidebarEntry: Identifiable, Equatable, Sendable {
     /// Title of a remote session the instance has not named.
     public static let untitledSession = "Untitled session"
 
+    /// The entries whose title contains `query`, ignoring case and accents, in the same order.
+    /// A query made only of whitespace keeps every entry.
+    public static func filtered(_ entries: [SidebarEntry], matching query: String) -> [SidebarEntry] {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else { return entries }
+        return entries.filter {
+            $0.title.range(of: needle, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+        }
+    }
+
     /// Last time the user interacted with the entry: the last update of a local conversation, or the
     /// last activity of a remote session (its start time when that is missing).
     public var lastInteraction: Date? {
