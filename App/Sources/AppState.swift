@@ -65,7 +65,8 @@ final class AppState {
             store: store,
             service: client,
             model: settings.model,
-            remoteSessions: RemoteSessionList(source: client)
+            remoteSessions: RemoteSessionList(source: client),
+            lastModel: UserDefaultsLastModelStorage()
         )
     }
 }
