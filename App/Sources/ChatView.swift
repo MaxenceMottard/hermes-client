@@ -22,7 +22,7 @@ struct ChatView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 12) {
+            LazyVStack(alignment: .leading, spacing: 24) {
                 ForEach(Array(session.messages.enumerated()), id: \.offset) { _, message in
                     MessageRow(message: message)
                 }
@@ -162,36 +162,49 @@ private extension ChatView {
     }
 }
 
+/// One message of a conversation, shared by the local and remote chats. A reply is laid out straight on
+/// the page, full width, without a background; a message from the user sits in a rounded bubble on the
+/// right, with its photos above it.
 struct MessageRow: View {
     let message: ChatMessage
 
+    private var isUser: Bool { message.role == "user" }
+
     var body: some View {
-        HStack {
-            if message.role == "user" { Spacer(minLength: 40) }
-            VStack(alignment: message.role == "user" ? .trailing : .leading, spacing: 6) {
-                if !message.images.isEmpty {
-                    ScrollView(.horizontal) {
-                        HStack(spacing: 6) {
-                            ForEach(Array(message.images.enumerated()), id: \.offset) { _, image in
-                                AttachmentThumbnail(data: image.data)
-                            }
-                        }
-                    }
-                }
-                if message.role == "user" {
-                    if !message.content.isEmpty {
-                        Text(message.content)
-                    }
-                } else {
-                    MarkdownView(source: message.content)
+        if isUser {
+            VStack(alignment: .trailing, spacing: 6) {
+                images
+                if !message.content.isEmpty {
+                    Text(message.content)
+                        .textSelection(.enabled)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(.primary.opacity(0.12), in: .rect(cornerRadius: 22, style: .continuous))
                 }
             }
-            .padding(10)
-                .background(
-                    message.role == "user" ? Color.accentColor.opacity(0.2) : Color.secondary.opacity(0.12),
-                    in: RoundedRectangle(cornerRadius: 12)
-                )
-            if message.role != "user" { Spacer(minLength: 40) }
+            .padding(.leading, 40)
+            .frame(maxWidth: .infinity, alignment: .trailing)
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
+                images
+                MarkdownView(source: message.content)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private var images: some View {
+        if !message.images.isEmpty {
+            ScrollView(.horizontal) {
+                HStack(spacing: 6) {
+                    ForEach(Array(message.images.enumerated()), id: \.offset) { _, image in
+                        AttachmentThumbnail(data: image.data)
+                    }
+                }
+            }
+            // Also aligns photos that fit: on the right for a message from the user.
+            .defaultScrollAnchor(isUser ? .trailing : .leading)
         }
     }
 }
