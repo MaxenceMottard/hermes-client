@@ -22,6 +22,15 @@ struct ConversationsView: View {
                 ChatView(session: session)
                     .navigationTitle(currentTitle)
                     .inlineNavigationTitle()
+                    .toolbar {
+                        if let export = currentExport {
+                            ToolbarItem(placement: .primaryAction) {
+                                ShareLink(item: ConversationFile(export: export)) {
+                                    Label("Export as Markdown", systemImage: "square.and.arrow.up")
+                                }
+                            }
+                        }
+                    }
             }
         }
         .onChange(of: browser.session?.phase) {
@@ -31,5 +40,9 @@ struct ConversationsView: View {
 
     private var currentTitle: String {
         browser.summaries.first { $0.id == browser.selectedID }?.title ?? ConversationTitle.placeholder
+    }
+
+    private var currentExport: ConversationExport? {
+        browser.selectedID.flatMap { browser.export($0) }
     }
 }

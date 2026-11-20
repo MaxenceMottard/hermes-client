@@ -95,6 +95,12 @@ public final class ConversationBrowser {
         }
     }
 
+    /// The Markdown export of a conversation, or `nil` if it does not exist.
+    public func export(_ id: UUID) -> ConversationExport? {
+        guard let conversation = try? store.conversation(id: id) else { return nil }
+        return ConversationExport.make(from: conversation)
+    }
+
     /// Renames a conversation. Blank titles are ignored.
     public func rename(_ id: UUID, to title: String) throws {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
