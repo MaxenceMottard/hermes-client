@@ -60,6 +60,8 @@ public final class RemoteTranscript: Identifiable {
     /// Messages received so far, displayed or not: the offset of the next page.
     private var received = 0
     private var sendTask: Task<Void, Never>?
+    /// The page request in flight, shared by every caller of `load()` and `loadMore()`.
+    private var loadTask: Task<Void, Never>?
 
     public init(sessionID: String, title: String?, source: any SessionListing) {
         self.sessionID = sessionID
@@ -81,42 +83,57 @@ public final class RemoteTranscript: Identifiable {
         }
     }
 
-    /// Loads the first page and replaces the transcript. Ignored while a request is running.
+    /// Loads the first page and replaces the transcript. A call made while a page is loading waits for it.
+    ///
+    /// The request runs in a task this object owns, so cancelling the caller does not cancel it. On iOS 27
+    /// a collapsed split view can send the detail view `onDisappear` right after it appears, which cancels
+    /// the view's `.task`: the request must outlive it, or the transcript stays empty.
     public func load() async {
-        guard state != .loading else { return }
-        state = .loading
-        do {
-            let page = try await source.listSessionMessages(
-                sessionID: sessionID, limit: Self.pageSize, offset: 0
+        await run { transcript in
+            let page = try await transcript.source.listSessionMessages(
+                sessionID: transcript.sessionID, limit: Self.pageSize, offset: 0
             )
-            lines = Self.lines(from: page.messages)
-            received = page.messages.count
-            hasMore = page.hasMore
-            state = .loaded
-        } catch is CancellationError {
-            state = .idle
-        } catch {
-            state = .failed(HermesAPIError.from(error))
+            transcript.lines = Self.lines(from: page.messages)
+            transcript.received = page.messages.count
+            transcript.hasMore = page.hasMore
         }
     }
 
-    /// Prepends the next page of older messages, if the instance reported one.
+    /// Prepends the next page of older messages, if the instance reported one. A call made while a page
+    /// is loading waits for it.
     public func loadMore() async {
-        guard hasMore, state != .loading else { return }
-        state = .loading
-        do {
-            let page = try await source.listSessionMessages(
-                sessionID: sessionID, limit: Self.pageSize, offset: received
+        guard hasMore || loadTask != nil else { return }
+        await run { transcript in
+            guard transcript.hasMore else { return }
+            let page = try await transcript.source.listSessionMessages(
+                sessionID: transcript.sessionID, limit: Self.pageSize, offset: transcript.received
             )
-            lines = Self.lines(from: page.messages) + lines
-            received += page.messages.count
-            hasMore = page.hasMore
-            state = .loaded
-        } catch is CancellationError {
-            state = .loaded
-        } catch {
-            state = .failed(HermesAPIError.from(error))
+            transcript.lines = Self.lines(from: page.messages) + transcript.lines
+            transcript.received += page.messages.count
+            transcript.hasMore = page.hasMore
         }
+    }
+
+    /// Runs one page request in a task owned by this object, or waits for the one already running.
+    private func run(_ request: @escaping @MainActor (RemoteTranscript) async throws -> Void) async {
+        if let loadTask {
+            await loadTask.value
+            return
+        }
+        state = .loading
+        let task = Task { @MainActor in
+            do {
+                try await request(self)
+                self.state = .loaded
+            } catch is CancellationError {
+                self.state = self.lines.isEmpty ? .idle : .loaded
+            } catch {
+                self.state = .failed(HermesAPIError.from(error))
+            }
+            self.loadTask = nil
+        }
+        loadTask = task
+        await task.value
     }
 
     /// Sends a message to the session and shows the reply as it streams. The user line appears at once.

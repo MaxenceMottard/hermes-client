@@ -28,6 +28,48 @@ actor FakeMessageSource: SessionListing {
     }
 }
 
+/// Holds each message request until `release()`, then answers it, or throws `CancellationError` if the
+/// requesting task was cancelled meanwhile, as `URLSession` does.
+actor GatedMessageSource: SessionListing {
+    private let page: SessionMessagesPage
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+    private(set) var requestCount = 0
+
+    init(page: SessionMessagesPage) {
+        self.page = page
+    }
+
+    var pendingCount: Int { waiting.count }
+
+    func release() {
+        let continuations = waiting
+        waiting = []
+        continuations.forEach { $0.resume() }
+    }
+
+    func listSessions(limit: Int, offset: Int) async throws -> SessionPage {
+        SessionPage(sessions: [], hasMore: false)
+    }
+
+    func listSessionMessages(sessionID: String, limit: Int, offset: Int) async throws -> SessionMessagesPage {
+        requestCount += 1
+        await withCheckedContinuation { waiting.append($0) }
+        try Task.checkCancellation()
+        return page
+    }
+
+    func streamSessionChat(sessionID: String, message: String) -> AsyncThrowingStream<SessionChatEvent, any Error> {
+        AsyncThrowingStream { $0.finish() }
+    }
+}
+
+/// Waits until the source holds a request.
+func waitForPendingRequest(_ source: GatedMessageSource) async {
+    while await source.pendingCount == 0 {
+        await Task.yield()
+    }
+}
+
 @MainActor
 @Suite("RemoteTranscript")
 struct RemoteTranscriptTests {
@@ -114,5 +156,42 @@ struct RemoteTranscriptTests {
 
         #expect(transcript.state == .failed(.notFound))
         #expect(transcript.lines.isEmpty)
+    }
+
+    @Test("cancelling the caller does not cancel the load, as when SwiftUI cancels the view's task")
+    func loadOutlivesCaller() async {
+        let source = GatedMessageSource(page: SessionMessagesPage(
+            sessionID: "s1", messages: [message("1", "user", "Hi")], hasMore: false
+        ))
+        let transcript = RemoteTranscript(sessionID: "s1", title: nil, source: source)
+
+        let caller = Task { await transcript.load() }
+        await waitForPendingRequest(source)
+        caller.cancel()
+        await source.release()
+        await caller.value
+
+        #expect(transcript.state == .loaded)
+        #expect(transcript.lines.map(\.text) == ["Hi"])
+    }
+
+    @Test("a load called while one is running waits for it and sends no second request")
+    func concurrentLoadsShareOneRequest() async {
+        let source = GatedMessageSource(page: SessionMessagesPage(
+            sessionID: "s1", messages: [message("1", "user", "Hi")], hasMore: false
+        ))
+        let transcript = RemoteTranscript(sessionID: "s1", title: nil, source: source)
+
+        let first = Task { await transcript.load() }
+        await waitForPendingRequest(source)
+        let second = Task { await transcript.load() }
+        await Task.yield()
+        await source.release()
+        await first.value
+        await second.value
+
+        #expect(await source.requestCount == 1)
+        #expect(transcript.state == .loaded)
+        #expect(transcript.lines.map(\.text) == ["Hi"])
     }
 }

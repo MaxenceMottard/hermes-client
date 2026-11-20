@@ -64,4 +64,29 @@ struct ConversationBrowserRemoteTests {
         #expect(browser.openedRemote == nil)
         #expect(browser.selectedID == local)
     }
+
+    @Test("opening a remote session starts loading its messages without the view")
+    func openRemoteStartsLoading() async throws {
+        let source = GatedMessageSource(page: SessionMessagesPage(
+            sessionID: "remote-1",
+            messages: [SessionMessage(id: "1", role: "user", content: "Hi")],
+            hasMore: false
+        ))
+        let browser = ConversationBrowser(
+            store: InMemoryConversationStore(),
+            service: FakeChatService(scripts: []),
+            model: "m",
+            remoteSessions: RemoteSessionList(source: source)
+        )
+
+        browser.openRemote(RemoteSession(id: "remote-1"))
+        await waitForPendingRequest(source)
+        await source.release()
+        let transcript = try #require(browser.openedRemote)
+        await transcript.load()
+
+        #expect(await source.requestCount == 1)
+        #expect(transcript.lines.map(\.text) == ["Hi"])
+    }
 }
+

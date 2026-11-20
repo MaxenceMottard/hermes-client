@@ -96,11 +96,19 @@ struct RemoteChatView: View {
         }
         .navigationTitle(transcript.title ?? "Untitled session")
         .inlineNavigationTitle()
+        // The browser starts the load when the session opens; this waits for it, or loads again if it was
+        // never started. On iOS 27 a collapsed split view can skip or cancel this task, so the jump to the
+        // newest line also runs when the first load lands.
         .task(id: transcript.sessionID) {
-            if transcript.state == .idle {
+            if transcript.state != .loaded {
                 await transcript.load()
             }
             await scrollToNewest()
+        }
+        .onChange(of: transcript.state) { oldState, newState in
+            if oldState == .loading, newState == .loaded, scrolledID == nil {
+                Task { await scrollToNewest() }
+            }
         }
     }
 
