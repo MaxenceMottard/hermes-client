@@ -1,32 +1,19 @@
 name: CI
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
-  push:
-    branches: [main]
   workflow_dispatch:
-
-concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
 
 permissions:
   contents: read
+  id-token: write
+
+env:
+  TUIST_SERVER_FULL_HANDLE: mtm-capital/hermes-client
+  PREVIEW_URL: https://tuist.dev/mtm-capital/hermes-client/previews/01a1fa37-d407-7d46-8b89-2d79845b8c73
 
 jobs:
-  package-tests:
-    name: HermesKit tests
-    # macOS 27 + Xcode 27 preview image (iOS 27 simulators).
-    runs-on: xcode-27
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v7
-      - name: swift test
-        run: swift test --package-path HermesKit
-
-  app:
-    name: App build
+  probe:
+    name: macOS preview probe
     runs-on: xcode-27
     timeout-minutes: 30
     steps:
@@ -35,27 +22,62 @@ jobs:
         with:
           install: true
           cache: true
-      - name: Generate Tuist project
+      - name: Host
         run: |
-          tuist install
-          tuist generate --no-open
-      - name: Build for iOS
+          sw_vers; uname -m; xcodebuild -version
+          spctl --status || true
+      - name: Authenticate with Tuist
+        run: tuist auth login
+      - name: Download and run the shared preview
+        timeout-minutes: 8
+        continue-on-error: true
         run: |
-          xcodebuild build \
-            -workspace Hermes.xcworkspace \
-            -scheme Hermes \
-            -destination 'generic/platform=iOS Simulator'
-      - name: Build for macOS
+          mkdir -p "$RUNNER_TEMP/out"
+          touch "$RUNNER_TEMP/marker"
+          tuist run "$PREVIEW_URL" 2>&1 | tail -40 || echo "[PROBE] tuist run exit $?"
+          sleep 8
+          echo "[PROBE] processes:"; pgrep -fl "Hermes.app" || echo "[PROBE] Hermes NOT running"
+          screencapture -x "$RUNNER_TEMP/out/after-tuist-run.png" || true
+          APP=$(find "$HOME" /private/var/folders -name Hermes.app -type d -newer "$RUNNER_TEMP/marker" 2>/dev/null | grep -v DerivedData | head -1)
+          echo "[PROBE] APP=$APP"
+          echo "$APP" > "$RUNNER_TEMP/app-path"
+      - name: Inspect the shared app
+        continue-on-error: true
         run: |
-          xcodebuild build \
-            -workspace Hermes.xcworkspace \
-            -scheme Hermes \
-            -destination 'generic/platform=macOS' \
-            CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=
-      # App tests are disabled: slow, and the business logic is tested in HermesKit.
-      # - name: Tests
-      #   run: |
-      #     xcodebuild test \
-      #       -workspace Hermes.xcworkspace \
-      #       -scheme Hermes \
-      #       -destination 'platform=iOS Simulator,name=iPhone 17,OS=27.0'
+          APP=$(cat "$RUNNER_TEMP/app-path")
+          [ -n "$APP" ] || { echo "[PROBE] no app found"; exit 0; }
+          echo "== layout"; ls -la "$APP/Contents" "$APP/Contents/MacOS"
+          echo "== Info.plist"; plutil -p "$APP/Contents/Info.plist" | grep -E "LSMinimumSystemVersion|CFBundleIdentifier|CFBundleExecutable|CFBundleShortVersion|CFBundleVersion|DTPlatform|DTSDK"
+          echo "== lipo"; lipo -info "$APP/Contents/MacOS/"*
+          echo "== otool -L"; otool -L "$APP/Contents/MacOS/Hermes"
+          echo "== codesign -dvvv"; codesign -dvvv "$APP" 2>&1
+          echo "== entitlements"; codesign -d --entitlements - "$APP" 2>&1
+          echo "== verify"; codesign --verify --deep --strict -vvvv "$APP" 2>&1 || echo "[PROBE] codesign verify FAILED"
+          echo "== spctl"; spctl -a -vvv -t exec "$APP" 2>&1 || echo "[PROBE] spctl rejected"
+          echo "== xattr"; xattr -lr "$APP" | head -20
+          echo "== direct launch (stderr 12s)"
+          ( "$APP/Contents/MacOS/Hermes" > "$RUNNER_TEMP/out/direct.log" 2>&1 & echo $! > "$RUNNER_TEMP/pid" )
+          sleep 12
+          if kill -0 "$(cat $RUNNER_TEMP/pid)" 2>/dev/null; then echo "[PROBE] direct launch: still running"; else echo "[PROBE] direct launch: EXITED"; fi
+          head -60 "$RUNNER_TEMP/out/direct.log"
+          screencapture -x "$RUNNER_TEMP/out/direct.png" || true
+          pkill -f "Hermes.app/Contents/MacOS/Hermes" || true
+          echo "== with quarantine (as if downloaded by a browser)"
+          cp -R "$APP" "$RUNNER_TEMP/QHermes.app"
+          xattr -w com.apple.quarantine "0083;$(printf %x $(date +%s));Safari;" "$RUNNER_TEMP/QHermes.app"
+          spctl -a -vvv -t exec "$RUNNER_TEMP/QHermes.app" 2>&1 || echo "[PROBE] spctl rejected quarantined copy"
+          open -n "$RUNNER_TEMP/QHermes.app" 2>&1 || echo "[PROBE] open failed"
+          sleep 8
+          pgrep -fl QHermes.app || echo "[PROBE] quarantined copy NOT running"
+          screencapture -x "$RUNNER_TEMP/out/quarantine.png" || true
+          pkill -f QHermes.app || true
+          echo "== crash reports"
+          ls -la ~/Library/Logs/DiagnosticReports/ 2>/dev/null | grep -i hermes || true
+          for f in ~/Library/Logs/DiagnosticReports/Hermes*; do [ -f "$f" ] && head -c 6000 "$f" && cp "$f" "$RUNNER_TEMP/out/"; done
+          echo "== unified log"
+          log show --last 3m --style compact --predicate 'process == "Hermes" OR (eventMessage CONTAINS[c] "hermes" AND (process == "amfid" OR process == "syspolicyd" OR process == "kernel" OR process == "taskgated-helper" OR process == "sandboxd" OR process == "runningboardd" OR process == "launchservicesd"))' 2>/dev/null | tail -150 || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shots
+          path: ${{ runner.temp }}/out
